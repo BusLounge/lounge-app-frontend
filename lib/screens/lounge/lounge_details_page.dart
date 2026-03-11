@@ -1,11 +1,104 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
 import '../../domain/entities/lounge.dart';
+import '../../presentation/providers/registration_provider.dart';
+import 'edit_lounge_details_page.dart';
 
-class LoungeDetailsPage extends StatelessWidget {
+class LoungeDetailsPage extends StatefulWidget {
   final Lounge lounge;
 
   const LoungeDetailsPage({super.key, required this.lounge});
+
+  @override
+  State<LoungeDetailsPage> createState() => _LoungeDetailsPageState();
+}
+
+class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
+  late Lounge _lounge;
+
+  @override
+  void initState() {
+    super.initState();
+    _lounge = widget.lounge;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLounge());
+  }
+
+  Future<void> _refreshLounge() async {
+    final lounge = await Provider.of<RegistrationProvider>(
+      context,
+      listen: false,
+    ).getLoungeDetails(_lounge.id);
+
+    if (!mounted || lounge == null) return;
+    setState(() {
+      _lounge = lounge;
+    });
+  }
+
+  Future<void> _openEditPage() async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditLoungeDetailsPage(initialLounge: _lounge),
+      ),
+    );
+
+    if (updated == true) {
+      await _refreshLounge();
+    }
+  }
+
+  Future<void> _deleteLounge() async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Lounge'),
+        content: Text(
+          'Are you sure you want to delete ${_lounge.loungeName}? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true || !mounted) return;
+
+    final success = await Provider.of<RegistrationProvider>(
+      context,
+      listen: false,
+    ).deleteLoungeById(_lounge.id);
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lounge deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context, true);
+      return;
+    }
+
+    final provider = Provider.of<RegistrationProvider>(context, listen: false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(provider.errorMessage ?? 'Failed to delete lounge'),
+        backgroundColor: AppColors.error,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +120,18 @@ class LoungeDetailsPage extends StatelessWidget {
           ),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: _openEditPage,
+            icon: const Icon(Icons.edit, color: AppColors.textPrimary),
+            tooltip: 'Edit Lounge',
+          ),
+          IconButton(
+            onPressed: _deleteLounge,
+            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+            tooltip: 'Delete Lounge',
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -40,24 +145,24 @@ class LoungeDetailsPage extends StatelessWidget {
                 title: 'Basic Information',
                 icon: Icons.info_outline,
                 children: [
-                  _buildInfoRow('Lounge Name', lounge.loungeName, Icons.store),
+                  _buildInfoRow('Lounge Name', _lounge.loungeName, Icons.store),
                   _buildInfoRow(
                     'Description',
-                    lounge.description ?? 'Not provided',
+                    _lounge.description ?? 'Not provided',
                     Icons.description_outlined,
                   ),
-                  _buildInfoRow('Address', lounge.address, Icons.location_on),
+                  _buildInfoRow('Address', _lounge.address, Icons.location_on),
                   _buildInfoRow(
                     'Contact Number',
-                    lounge.contactPhone ?? 'Not provided',
+                    _lounge.contactPhone ?? 'Not provided',
                     Icons.phone,
                   ),
                   _buildInfoRow(
                     'Capacity',
-                    lounge.capacity?.toString() ?? 'Not provided',
+                    _lounge.capacity?.toString() ?? 'Not provided',
                     Icons.people,
                   ),
-                  _buildInfoRow('Status', lounge.status, Icons.verified_user),
+                  _buildInfoRow('Status', _lounge.status, Icons.verified_user),
                 ],
               ),
               const SizedBox(height: 16),
@@ -67,22 +172,22 @@ class LoungeDetailsPage extends StatelessWidget {
                 children: [
                   _buildInfoRow(
                     '1 Hour',
-                    _priceLabel(lounge.price1Hour),
+                    _priceLabel(_lounge.price1Hour),
                     Icons.access_time,
                   ),
                   _buildInfoRow(
                     '2 Hours',
-                    _priceLabel(lounge.price2Hours),
+                    _priceLabel(_lounge.price2Hours),
                     Icons.schedule,
                   ),
                   _buildInfoRow(
                     '3 Hours',
-                    _priceLabel(lounge.price3Hours),
+                    _priceLabel(_lounge.price3Hours),
                     Icons.timelapse,
                   ),
                   _buildInfoRow(
                     'Until Bus',
-                    _priceLabel(lounge.priceUntilBus),
+                    _priceLabel(_lounge.priceUntilBus),
                     Icons.directions_bus,
                   ),
                 ],
@@ -94,27 +199,27 @@ class LoungeDetailsPage extends StatelessWidget {
                 children: [
                   _buildInfoRow(
                     'State',
-                    lounge.state ?? 'Not provided',
+                    _lounge.state ?? 'Not provided',
                     Icons.map,
                   ),
                   _buildInfoRow(
                     'Country',
-                    lounge.country ?? 'Not provided',
+                    _lounge.country ?? 'Not provided',
                     Icons.public,
                   ),
                   _buildInfoRow(
                     'Postal Code',
-                    lounge.postalCode ?? 'Not provided',
+                    _lounge.postalCode ?? 'Not provided',
                     Icons.markunread_mailbox_outlined,
                   ),
                   _buildInfoRow(
                     'Latitude',
-                    lounge.latitude ?? 'Not provided',
+                    _lounge.latitude ?? 'Not provided',
                     Icons.place_outlined,
                   ),
                   _buildInfoRow(
                     'Longitude',
-                    lounge.longitude ?? 'Not provided',
+                    _lounge.longitude ?? 'Not provided',
                     Icons.place,
                   ),
                 ],
@@ -149,14 +254,14 @@ class LoungeDetailsPage extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(16),
-              image: lounge.primaryPhoto != null
+              image: _lounge.primaryPhoto != null
                   ? DecorationImage(
-                      image: NetworkImage(lounge.primaryPhoto!),
+                      image: NetworkImage(_lounge.primaryPhoto!),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
-            child: lounge.primaryPhoto == null
+            child: _lounge.primaryPhoto == null
                 ? Icon(
                     Icons.apartment,
                     size: 64,
@@ -166,7 +271,7 @@ class LoungeDetailsPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            lounge.loungeName,
+            _lounge.loungeName,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 22,
@@ -178,15 +283,15 @@ class LoungeDetailsPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: _statusColor(lounge.status).withOpacity(0.12),
+              color: _statusColor(_lounge.status).withOpacity(0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              lounge.status.toUpperCase(),
+              _lounge.status.toUpperCase(),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: _statusColor(lounge.status),
+                color: _statusColor(_lounge.status),
               ),
             ),
           ),
@@ -276,7 +381,7 @@ class LoungeDetailsPage extends StatelessWidget {
   }
 
   Widget _buildAmenitiesSection() {
-    final amenities = lounge.amenities ?? const [];
+    final amenities = _lounge.amenities ?? const [];
 
     return _buildSectionCard(
       title: 'Amenities',
@@ -330,7 +435,7 @@ class LoungeDetailsPage extends StatelessWidget {
   }
 
   Widget _buildRoutesSection() {
-    final routes = lounge.routes ?? const [];
+    final routes = _lounge.routes ?? const [];
 
     return _buildSectionCard(
       title: 'Routes',
@@ -376,7 +481,7 @@ class LoungeDetailsPage extends StatelessWidget {
   }
 
   Widget _buildImagesSection() {
-    final images = lounge.images ?? const [];
+    final images = _lounge.images ?? const [];
 
     return _buildSectionCard(
       title: 'Images',

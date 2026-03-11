@@ -161,9 +161,26 @@ class LoungeRepositoryImpl implements LoungeRepository {
   @override
   Future<Either<Failure, void>> updateLounge(Lounge lounge) async {
     try {
-      // TODO: Implement update when backend endpoint is ready
-      // Will need to convert Lounge entity to backend format similar to addLounge
-      return Left(ServerFailure('Update lounge not implemented yet'));
+      await remoteDataSource.updateLounge(
+        id: lounge.id,
+        loungeName: lounge.loungeName,
+        address: lounge.address,
+        contactPhone: lounge.contactPhone ?? '',
+        latitude: lounge.latitude,
+        longitude: lounge.longitude,
+        capacity: lounge.capacity,
+        price1Hour: lounge.price1Hour,
+        price2Hours: lounge.price2Hours,
+        price3Hours: lounge.price3Hours,
+        priceUntilBus: lounge.priceUntilBus,
+        description: lounge.description,
+        amenities: lounge.amenities ?? const [],
+        images: lounge.images ?? const [],
+        routes: (lounge.routes ?? const [])
+            .map((route) => LoungeRouteModel.fromEntity(route))
+            .toList(),
+      );
+      return const Right(null);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -174,8 +191,8 @@ class LoungeRepositoryImpl implements LoungeRepository {
   @override
   Future<Either<Failure, void>> deleteLounge(String id) async {
     try {
-      // TODO: Implement delete when backend endpoint is ready
-      return Left(ServerFailure('Delete lounge not implemented yet'));
+      await remoteDataSource.deleteLounge(id);
+      return const Right(null);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {

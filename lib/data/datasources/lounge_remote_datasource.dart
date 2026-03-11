@@ -156,7 +156,110 @@ class LoungeRemoteDataSource {
         throw ServerException('Failed to get lounge');
       }
 
-      return response.data as Map<String, dynamic>;
+      final responseData = response.data;
+      if (responseData is Map<String, dynamic>) {
+        final nested = responseData['data'] ??
+            responseData['lounge'] ??
+            responseData['result'];
+        if (nested is Map<String, dynamic>) {
+          return nested;
+        }
+        return responseData;
+      }
+
+      throw ServerException('Invalid lounge response format');
+    } catch (e) {
+      throw ServerException(e.toString());
+    }
+  }
+
+  /// Update a specific lounge by ID
+  /// PUT /api/v1/lounges/:id
+  Future<Map<String, dynamic>> updateLounge({
+    required String id,
+    required String loungeName,
+    required String address,
+    required String contactPhone,
+    String? latitude,
+    String? longitude,
+    int? capacity,
+    String? price1Hour,
+    String? price2Hours,
+    String? price3Hours,
+    String? priceUntilBus,
+    String? description,
+    required List<String> amenities,
+    required List<String> images,
+    required List<LoungeRouteModel> routes,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'lounge_name': loungeName,
+        'address': address,
+        'contact_phone': contactPhone,
+        'amenities': amenities,
+        'images': images,
+        'routes': routes.map((route) => route.toJson()).toList(),
+      };
+
+      if (latitude != null && latitude.isNotEmpty) data['latitude'] = latitude;
+      if (longitude != null && longitude.isNotEmpty) {
+        data['longitude'] = longitude;
+      }
+      if (capacity != null) data['capacity'] = capacity;
+      if (price1Hour != null && price1Hour.isNotEmpty) {
+        data['price_1_hour'] = price1Hour;
+      }
+      if (price2Hours != null && price2Hours.isNotEmpty) {
+        data['price_2_hours'] = price2Hours;
+      }
+      if (price3Hours != null && price3Hours.isNotEmpty) {
+        data['price_3_hours'] = price3Hours;
+      }
+      if (priceUntilBus != null && priceUntilBus.isNotEmpty) {
+        data['price_until_bus'] = priceUntilBus;
+      }
+      if (description != null && description.isNotEmpty) {
+        data['description'] = description;
+      }
+
+      final response = await apiClient.put('/api/v1/lounges/$id', data: data);
+
+      if (response.statusCode != 200) {
+        throw ServerException(
+          'Failed to update lounge - Status: ${response.statusCode}',
+        );
+      }
+
+      if (response.data is Map<String, dynamic>) {
+        return response.data as Map<String, dynamic>;
+      }
+
+      return {'message': 'Lounge updated successfully', 'lounge_id': id};
+    } on DioException catch (e) {
+      final errorMessage =
+          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      throw ServerException('Update lounge failed: $errorMessage');
+    } catch (e) {
+      throw ServerException(e.toString());
+    }
+  }
+
+  /// Delete a specific lounge by ID
+  /// DELETE /api/v1/lounges/:id
+  Future<void> deleteLounge(String id) async {
+    try {
+      final response = await apiClient.delete('/api/v1/lounges/$id');
+
+      if (response.statusCode != 200) {
+        throw ServerException(
+          'Failed to delete lounge - Status: ${response.statusCode}',
+        );
+      }
+    } on DioException catch (e) {
+      final errorMessage =
+          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      throw ServerException('Delete lounge failed: $errorMessage');
     } catch (e) {
       throw ServerException(e.toString());
     }

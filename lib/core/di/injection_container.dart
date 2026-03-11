@@ -268,6 +268,7 @@ class InjectionContainer {
     _registrationProvider = RegistrationProvider(
       addLoungeUseCase: _addLoungeUseCase,
       getMyLoungesUseCase: _getMyLoungesUseCase,
+      loungeRepository: _loungeRepository,
     );
 
     _marketplaceProvider = MarketplaceProvider(

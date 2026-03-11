@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/lounge.dart';
 import '../../domain/entities/lounge_route.dart';
+import '../../domain/repositories/lounge_repository.dart';
 import '../../domain/usecases/add_lounge.dart';
 import '../../domain/usecases/get_my_lounges.dart';
 
@@ -10,10 +11,12 @@ import '../../domain/usecases/get_my_lounges.dart';
 class RegistrationProvider with ChangeNotifier {
   final AddLounge addLoungeUseCase;
   final GetMyLounges getMyLoungesUseCase;
+  final LoungeRepository loungeRepository;
 
   RegistrationProvider({
     required this.addLoungeUseCase,
     required this.getMyLoungesUseCase,
+    required this.loungeRepository,
   });
 
   // State
@@ -390,6 +393,78 @@ class RegistrationProvider with ChangeNotifier {
         _isLoading = false;
         _myLounges = lounges;
         notifyListeners();
+      },
+    );
+  }
+
+  Future<Lounge?> getLoungeDetails(String id) async {
+    final result = await loungeRepository.getLoungeById(id);
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        notifyListeners();
+        return null;
+      },
+      (lounge) {
+        final index = _myLounges.indexWhere((item) => item.id == lounge.id);
+        if (index != -1) {
+          _myLounges[index] = lounge;
+          notifyListeners();
+        }
+        return lounge;
+      },
+    );
+  }
+
+  Future<bool> updateLoungeDetails(Lounge lounge) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await loungeRepository.updateLounge(lounge);
+
+    return result.fold(
+      (failure) {
+        _isLoading = false;
+        _errorMessage = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) async {
+        final refreshedLounge = await getLoungeDetails(lounge.id);
+        if (refreshedLounge == null) {
+          final index = _myLounges.indexWhere((item) => item.id == lounge.id);
+          if (index != -1) {
+            _myLounges[index] = lounge;
+          }
+        }
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  Future<bool> deleteLoungeById(String id) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await loungeRepository.deleteLounge(id);
+
+    return result.fold(
+      (failure) {
+        _isLoading = false;
+        _errorMessage = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _myLounges.removeWhere((item) => item.id == id);
+        _isLoading = false;
+        notifyListeners();
+        return true;
       },
     );
   }

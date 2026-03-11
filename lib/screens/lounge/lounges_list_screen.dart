@@ -5,6 +5,7 @@ import '../../presentation/providers/registration_provider.dart';
 import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../domain/entities/lounge.dart';
 import '../../widgets/owner_bottom_nav_bar.dart';
+import 'edit_lounge_details_page.dart';
 
 /// Screen showing list of all lounges owned by the user
 class LoungesListScreen extends StatefulWidget {
@@ -29,6 +30,47 @@ class _LoungesListScreenState extends State<LoungesListScreen> {
       listen: false,
     );
     await registrationProvider.loadMyLounges();
+  }
+
+  Future<void> _confirmDeleteLounge(Lounge lounge) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Lounge'),
+        content: Text(
+          'Are you sure you want to delete ${lounge.loungeName}? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true || !mounted) return;
+
+    final provider = Provider.of<RegistrationProvider>(context, listen: false);
+    final success = await provider.deleteLoungeById(lounge.id);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Lounge deleted successfully'
+              : provider.errorMessage ?? 'Failed to delete lounge',
+        ),
+        backgroundColor: success ? Colors.green : AppColors.error,
+      ),
+    );
   }
 
   @override
@@ -487,9 +529,25 @@ class _LoungesListScreenState extends State<LoungesListScreen> {
                 subtitle: const Text('Update lounge details'),
                 onTap: () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit lounge coming soon!')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          EditLoungeDetailsPage(initialLounge: lounge),
+                    ),
                   );
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.error,
+                ),
+                title: const Text('Delete Lounge'),
+                subtitle: const Text('Remove this lounge permanently'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteLounge(lounge);
                 },
               ),
               const SizedBox(height: 8),

@@ -5,7 +5,9 @@ import '../../presentation/providers/registration_provider.dart';
 import '../../domain/entities/lounge.dart';
 
 class EditLoungeDetailsPage extends StatefulWidget {
-  const EditLoungeDetailsPage({super.key});
+  final Lounge? initialLounge;
+
+  const EditLoungeDetailsPage({super.key, this.initialLounge});
 
   @override
   State<EditLoungeDetailsPage> createState() => _EditLoungeDetailsPageState();
@@ -14,23 +16,53 @@ class EditLoungeDetailsPage extends StatefulWidget {
 class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   Lounge? _selectedLounge;
   final _formKey = GlobalKey<FormState>();
+  bool _isSaving = false;
 
   final _loungeNameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _contactPhoneCtrl = TextEditingController();
+  final _latitudeCtrl = TextEditingController();
+  final _longitudeCtrl = TextEditingController();
   final _capacityCtrl = TextEditingController();
   final _price1HourCtrl = TextEditingController();
+  final _price2HourCtrl = TextEditingController();
   final _price3HourCtrl = TextEditingController();
-  final _price6HourCtrl = TextEditingController();
+  final _priceUntilBusCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.initialLounge != null) {
+        setState(() {
+          _selectedLounge = widget.initialLounge;
+          _populateForm(widget.initialLounge!);
+        });
+
+        final latest = await Provider.of<RegistrationProvider>(
+          context,
+          listen: false,
+        ).getLoungeDetails(widget.initialLounge!.id);
+
+        if (!mounted || latest == null) return;
+        _syncSelectedLounge(latest);
+      }
+    });
+  }
 
   @override
   void dispose() {
     _loungeNameCtrl.dispose();
     _addressCtrl.dispose();
+    _contactPhoneCtrl.dispose();
+    _latitudeCtrl.dispose();
+    _longitudeCtrl.dispose();
     _capacityCtrl.dispose();
     _price1HourCtrl.dispose();
+    _price2HourCtrl.dispose();
     _price3HourCtrl.dispose();
-    _price6HourCtrl.dispose();
+    _priceUntilBusCtrl.dispose();
     _descriptionCtrl.dispose();
     super.dispose();
   }
@@ -38,15 +70,83 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   void _populateForm(Lounge lounge) {
     _loungeNameCtrl.text = lounge.loungeName;
     _addressCtrl.text = lounge.address;
+    _contactPhoneCtrl.text = lounge.contactPhone ?? '';
+    _latitudeCtrl.text = lounge.latitude ?? '';
+    _longitudeCtrl.text = lounge.longitude ?? '';
     _capacityCtrl.text = lounge.capacity?.toString() ?? '';
     _price1HourCtrl.text = lounge.price1Hour?.toString() ?? '';
-    _price3HourCtrl.text = '';
-    _price6HourCtrl.text = '';
+    _price2HourCtrl.text = lounge.price2Hours?.toString() ?? '';
+    _price3HourCtrl.text = lounge.price3Hours?.toString() ?? '';
+    _priceUntilBusCtrl.text = lounge.priceUntilBus?.toString() ?? '';
     _descriptionCtrl.text = lounge.description ?? '';
   }
 
-  void _saveChanges() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _loadSelectedLounge(Lounge lounge) async {
+    setState(() {
+      _selectedLounge = lounge;
+      _populateForm(lounge);
+    });
+
+    final latest = await Provider.of<RegistrationProvider>(
+      context,
+      listen: false,
+    ).getLoungeDetails(lounge.id);
+
+    if (!mounted || latest == null) return;
+    _syncSelectedLounge(latest);
+  }
+
+  void _syncSelectedLounge(Lounge latest) {
+    final lounges =
+        Provider.of<RegistrationProvider>(context, listen: false).myLounges;
+    final matched = lounges.where((item) => item.id == latest.id).toList();
+    final selected = matched.isNotEmpty ? matched.first : latest;
+
+    setState(() {
+      _selectedLounge = selected;
+      _populateForm(selected);
+    });
+  }
+
+  Future<void> _saveChanges() async {
+    if (!_formKey.currentState!.validate() || _selectedLounge == null) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    final registrationProvider = Provider.of<RegistrationProvider>(
+      context,
+      listen: false,
+    );
+
+    final updatedLounge = _selectedLounge!.copyWith(
+      loungeName: _loungeNameCtrl.text.trim(),
+      address: _addressCtrl.text.trim(),
+      contactPhone: _contactPhoneCtrl.text.trim(),
+      latitude: _latitudeCtrl.text.trim(),
+      longitude: _longitudeCtrl.text.trim(),
+      capacity: int.tryParse(_capacityCtrl.text.trim()),
+      price1Hour: _nullableText(_price1HourCtrl),
+      price2Hours: _nullableText(_price2HourCtrl),
+      price3Hours: _nullableText(_price3HourCtrl),
+      priceUntilBus: _nullableText(_priceUntilBusCtrl),
+      description: _nullableText(_descriptionCtrl),
+    );
+
+    final success = await registrationProvider.updateLoungeDetails(
+      updatedLounge,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+    });
+
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Lounge details updated successfully!'),
@@ -57,8 +157,23 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
           ),
         ),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          registrationProvider.errorMessage ??
+              'Failed to update lounge details',
+        ),
+        backgroundColor: Colors.red.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
   }
 
   @override
@@ -91,6 +206,14 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
       body: Consumer<RegistrationProvider>(
         builder: (context, registrationProvider, child) {
           final lounges = registrationProvider.myLounges;
+          final matchingSelectedLounges = _selectedLounge == null
+              ? <Lounge>[]
+              : lounges
+                  .where((item) => item.id == _selectedLounge!.id)
+                  .toList();
+          final dropdownSelectedLounge = matchingSelectedLounges.isNotEmpty
+              ? matchingSelectedLounges.first
+              : null;
 
           if (lounges.isEmpty) {
             return Center(
@@ -170,73 +293,101 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
 
                     const SizedBox(height: 32),
 
-                    // Select Lounge
-                    const Text(
-                      'Select Lounge',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                    if (widget.initialLounge == null) ...[
+                      const Text(
+                        'Select Lounge',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: DropdownButtonFormField<Lounge>(
+                          value: dropdownSelectedLounge,
+                          items: lounges.map((lounge) {
+                            return DropdownMenuItem<Lounge>(
+                              value: lounge,
+                              child: Text(
+                                lounge.loungeName,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          decoration: InputDecoration(
+                            hintText: 'Choose a lounge to edit',
+                            hintStyle: TextStyle(color: Colors.grey.shade500),
+                            prefixIcon: const Icon(
+                              Icons.business,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                            isDense: true,
+                          ),
+                          icon: Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          dropdownColor: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          onChanged: (lounge) {
+                            if (lounge != null) {
+                              _loadSelectedLounge(lounge);
+                            }
+                          },
+                          validator: (v) =>
+                              v == null ? 'Please select a lounge' : null,
+                        ),
                       ),
-                      child: DropdownButtonFormField<Lounge>(
-                        value: _selectedLounge,
-                        items: lounges.map((lounge) {
-                          return DropdownMenuItem<Lounge>(
-                            value: lounge,
-                            child: Text(
-                              lounge.loungeName,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black87,
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.business,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _selectedLounge?.loungeName ??
+                                    widget.initialLounge!.loungeName,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
-                          );
-                        }).toList(),
-                        decoration: InputDecoration(
-                          hintText: 'Choose a lounge to edit',
-                          hintStyle: TextStyle(color: Colors.grey.shade500),
-                          prefixIcon: const Icon(
-                            Icons.business,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                          isDense: true,
+                          ],
                         ),
-                        icon: Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Icon(
-                            Icons.keyboard_arrow_down,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        dropdownColor: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        onChanged: (lounge) {
-                          setState(() {
-                            _selectedLounge = lounge;
-                            if (lounge != null) {
-                              _populateForm(lounge);
-                            }
-                          });
-                        },
-                        validator: (v) =>
-                            v == null ? 'Please select a lounge' : null,
                       ),
-                    ),
+                    ],
 
                     if (_selectedLounge != null) ...[
                       const SizedBox(height: 32),
@@ -275,6 +426,51 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                         maxLines: 2,
                         validator: (v) => v == null || v.isEmpty
                             ? 'Please enter address'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _contactPhoneCtrl,
+                        decoration: _inputDecoration(
+                          'Contact Phone',
+                          Icons.phone_outlined,
+                        ),
+                        keyboardType: TextInputType.phone,
+                        validator: (v) => v == null || v.isEmpty
+                            ? 'Please enter contact phone'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _latitudeCtrl,
+                        decoration: _inputDecoration(
+                          'Latitude',
+                          Icons.place_outlined,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: (v) => v == null || v.isEmpty
+                            ? 'Please enter latitude'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _longitudeCtrl,
+                        decoration: _inputDecoration(
+                          'Longitude',
+                          Icons.place,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: (v) => v == null || v.isEmpty
+                            ? 'Please enter longitude'
                             : null,
                       ),
                       const SizedBox(height: 16),
@@ -329,6 +525,16 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                       const SizedBox(height: 16),
 
                       TextFormField(
+                        controller: _price2HourCtrl,
+                        decoration: _inputDecoration(
+                          '2 Hour Price',
+                          Icons.more_time,
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
                         controller: _price3HourCtrl,
                         decoration: _inputDecoration(
                           '3 Hour Price',
@@ -339,10 +545,10 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                       const SizedBox(height: 16),
 
                       TextFormField(
-                        controller: _price6HourCtrl,
+                        controller: _priceUntilBusCtrl,
                         decoration: _inputDecoration(
-                          '6 Hour Price',
-                          Icons.watch_later_outlined,
+                          'Until Bus Price',
+                          Icons.directions_bus,
                         ),
                         keyboardType: TextInputType.number,
                       ),
@@ -353,7 +559,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _saveChanges,
+                          onPressed: _isSaving ? null : _saveChanges,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -364,13 +570,22 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                             elevation: 2,
                             shadowColor: AppColors.primary.withOpacity(0.3),
                           ),
-                          child: const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Save Changes',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -415,5 +630,10 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
         borderSide: const BorderSide(color: Colors.red, width: 2),
       ),
     );
+  }
+
+  String? _nullableText(TextEditingController controller) {
+    final value = controller.text.trim();
+    return value.isEmpty ? null : value;
   }
 }
