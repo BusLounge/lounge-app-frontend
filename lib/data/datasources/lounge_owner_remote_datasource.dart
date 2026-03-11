@@ -135,7 +135,17 @@ class LoungeOwnerRemoteDataSource {
         };
       }
 
-      final data = response.data as Map<String, dynamic>;
+      final rawData = response.data;
+      if (rawData is! Map<String, dynamic>) {
+        print('⚠️ Profile response is not a map: ${rawData.runtimeType}');
+        return {
+          'id': '',
+          'profile_completed': false,
+          'verification_status': 'pending',
+        };
+      }
+
+      final data = _extractProfilePayload(rawData);
 
       // 🔍 DEBUG: Log FULL JSON response
       print('🔍 API RESPONSE /lounge-owner/profile FULL JSON:');
@@ -154,6 +164,24 @@ class LoungeOwnerRemoteDataSource {
         'verification_status': 'pending',
       };
     }
+  }
+
+  Map<String, dynamic> _extractProfilePayload(Map<String, dynamic> payload) {
+    final candidates = [
+      payload['data'],
+      payload['profile'],
+      payload['lounge_owner'],
+      payload['loungeOwner'],
+      payload['result'],
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate is Map<String, dynamic>) {
+        return candidate;
+      }
+    }
+
+    return payload;
   }
 
   /// Check if OCR is blocked

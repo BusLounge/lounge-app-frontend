@@ -5,8 +5,27 @@ import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../widgets/owner_bottom_nav_bar.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Provider.of<LoungeOwnerProvider>(
+        context,
+        listen: false,
+      ).getLoungeOwnerProfile();
+    });
+  }
+
+  bool _hasValue(String? value) => value != null && value.trim().isNotEmpty;
 
   Future<void> _logout(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -53,8 +72,6 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color pageBg = Color(0xFFFFFBF5);
-
     return Consumer2<LoungeOwnerProvider, AuthProvider>(
       builder: (context, loungeOwnerProvider, authProvider, child) {
         final loungeOwner = loungeOwnerProvider.loungeOwner;
@@ -160,13 +177,32 @@ class ProfileScreen extends StatelessWidget {
                           user!.phoneNumber,
                           Icons.phone,
                         ),
-                      if (loungeOwner?.managerFullName != null &&
-                          loungeOwner!.managerFullName != '')
+                      if (_hasValue(loungeOwner?.managerFullName))
                         _buildInfoRow(
-                          'Full Name',
-                          loungeOwner.managerFullName!,
+                          'Manager Full Name',
+                          loungeOwner!.managerFullName!,
                           Icons.person,
                         ),
+                      if (_hasValue(loungeOwner?.managerNicNumber))
+                        _buildInfoRow(
+                          'Manager NIC Number',
+                          loungeOwner!.managerNicNumber!,
+                          Icons.badge,
+                        ),
+                      _buildInfoRow(
+                        'Manager Email',
+                        _hasValue(loungeOwner?.managerEmail)
+                            ? loungeOwner!.managerEmail!
+                            : 'Not provided',
+                        Icons.email,
+                      ),
+                      _buildInfoRow(
+                        'District',
+                        _hasValue(loungeOwner?.district)
+                            ? loungeOwner!.district!
+                            : 'Not provided',
+                        Icons.location_on,
+                      ),
                     ],
                   ),
 

@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -13,6 +14,17 @@ val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
+val googleMapsApiKey = localProperties
+    .getProperty("GOOGLE_MAPS_API_KEY", "")
+    .trim()
+
+if (googleMapsApiKey.isEmpty()) {
+    throw GradleException(
+        "GOOGLE_MAPS_API_KEY is missing in android/local.properties. " +
+            "Add GOOGLE_MAPS_API_KEY=<your_key> and rebuild.",
+    )
 }
 
 android {
@@ -40,7 +52,7 @@ android {
         versionName = flutter.versionName
         
         // Inject Google Maps API Key from local.properties
-        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     buildTypes {

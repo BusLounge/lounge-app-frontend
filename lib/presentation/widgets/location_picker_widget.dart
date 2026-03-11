@@ -22,6 +22,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
   LatLng? _selectedLocation;
   String _address = '';
   bool _isLoading = false;
+  bool _hasLocationPermission = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -31,6 +32,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
         widget.initialLocation ??
         const LatLng(6.9271, 79.8612); // Default to Colombo, Sri Lanka
     _getAddressFromLatLng(_selectedLocation!);
+    _initializeLocationPermission();
   }
 
   @override
@@ -49,13 +51,17 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
+          setState(() => _hasLocationPermission = false);
           throw Exception('Location permission denied');
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
+        setState(() => _hasLocationPermission = false);
         throw Exception('Location permissions are permanently denied');
       }
+
+      setState(() => _hasLocationPermission = true);
 
       // Get position
       Position position = await Geolocator.getCurrentPosition(
@@ -74,6 +80,21 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _initializeLocationPermission() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      setState(() {
+        _hasLocationPermission =
+            permission == LocationPermission.always ||
+                permission == LocationPermission.whileInUse;
+      });
+    } catch (_) {
+      setState(() {
+        _hasLocationPermission = false;
+      });
     }
   }
 
@@ -173,7 +194,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
                     ),
                   }
                 : {},
-            myLocationEnabled: true,
+            myLocationEnabled: _hasLocationPermission,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
           ),

@@ -214,6 +214,7 @@ class LoungeOwnerProvider with ChangeNotifier {
           managerFullName: managerFullName ?? _profile!.managerFullName,
           managerNicNumber: managerNicNumber ?? _profile!.managerNicNumber,
           managerEmail: managerEmail ?? _profile!.managerEmail,
+          district: district ?? _profile!.district,
         );
       }
 

@@ -5,19 +5,21 @@ import 'package:equatable/equatable.dart';
 class LoungeOwner extends Equatable {
   final String id;
   final String userId;
-  
+
   // Business Information
   final String? businessName;
   final String? businessLicense;
-  
+
   // Manager Information (person managing the business)
   final String? managerFullName;
   final String? managerNicNumber;
   final String? managerEmail;
+  final String? district;
   // Note: Manager NIC images now stored in Supabase storage only (not in database)
-  
+
   // Registration Progress (NIC verification removed)
-  final String registrationStep; // phone_verified, business_info, lounge_added, completed
+  final String
+      registrationStep; // phone_verified, business_info, lounge_added, completed
   final bool profileCompleted;
 
   // Admin Approval Status
@@ -41,6 +43,7 @@ class LoungeOwner extends Equatable {
     this.managerFullName,
     this.managerNicNumber,
     this.managerEmail,
+    this.district,
     required this.registrationStep,
     required this.profileCompleted,
     required this.verificationStatus,
@@ -62,6 +65,7 @@ class LoungeOwner extends Equatable {
         managerFullName,
         managerNicNumber,
         managerEmail,
+        district,
         registrationStep,
         profileCompleted,
         verificationStatus,
@@ -75,7 +79,10 @@ class LoungeOwner extends Equatable {
       ];
 
   /// Check if business and manager info is completed
-  bool get hasBusinessInfo => businessName != null && managerFullName != null && managerNicNumber != null;
+  bool get hasBusinessInfo =>
+      businessName != null &&
+      managerFullName != null &&
+      managerNicNumber != null;
 
   /// Check if registration is completed
   bool get isCompleted => registrationStep == 'completed' && profileCompleted;
@@ -110,6 +117,7 @@ class LoungeOwner extends Equatable {
     String? managerFullName,
     String? managerNicNumber,
     String? managerEmail,
+    String? district,
     String? registrationStep,
     bool? profileCompleted,
     String? verificationStatus,
@@ -129,6 +137,7 @@ class LoungeOwner extends Equatable {
       managerFullName: managerFullName ?? this.managerFullName,
       managerNicNumber: managerNicNumber ?? this.managerNicNumber,
       managerEmail: managerEmail ?? this.managerEmail,
+      district: district ?? this.district,
       registrationStep: registrationStep ?? this.registrationStep,
       profileCompleted: profileCompleted ?? this.profileCompleted,
       verificationStatus: verificationStatus ?? this.verificationStatus,
