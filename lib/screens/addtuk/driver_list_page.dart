@@ -50,6 +50,56 @@ class _DriverListPageState extends State<DriverListPage> {
     await driverProvider.getDriversByLounge(loungeId: _selectedLoungeId!);
   }
 
+  Future<void> _confirmDeleteDriver(String driverId) async {
+    if (_selectedLoungeId == null) return;
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Driver'),
+        content: const Text(
+          'Are you sure you want to remove this driver from the lounge?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+
+    final driverProvider = context.read<DriverProvider>();
+    final success = await driverProvider.removeDriver(
+      loungeId: _selectedLoungeId!,
+      driverId: driverId,
+      showLoading: false,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Driver removed successfully'
+              : (driverProvider.error ?? 'Failed to remove driver'),
+        ),
+      ),
+    );
+
+    if (!success) {
+      driverProvider.clearError();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,7 +236,12 @@ class _DriverListPageState extends State<DriverListPage> {
                   ),
                 ),
                 // Driver list
-                ...driverList.map((driver) => DriverCard(driver: driver)),
+                ...driverList.map(
+                  (driver) => DriverCard(
+                    driver: driver,
+                    onDelete: () => _confirmDeleteDriver(driver.id),
+                  ),
+                ),
               ],
             ),
           );
@@ -217,10 +272,12 @@ class _DriverListPageState extends State<DriverListPage> {
 /// ---------------- DRIVER CARD ----------------
 class DriverCard extends StatelessWidget {
   final dynamic driver;
+  final VoidCallback? onDelete;
 
   const DriverCard({
     super.key,
     required this.driver,
+    this.onDelete,
   });
 
   @override
@@ -264,6 +321,17 @@ class DriverCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onDelete != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppColors.error,
+                  ),
+                  tooltip: 'Delete driver',
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),

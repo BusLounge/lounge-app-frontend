@@ -203,6 +203,31 @@ class LoungeStaffProvider extends ChangeNotifier {
     }
   }
 
+  /// Remove a staff member from lounge (Owner only)
+  Future<bool> removeStaff({
+    required String loungeId,
+    required String staffId,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await remoteDataSource.removeStaff(loungeId: loungeId, staffId: staffId);
+      _staffList.removeWhere((staff) => staff.id == staffId);
+      return true;
+    } on AppException catch (e) {
+      _error = e.message;
+      return false;
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Get my staff profile (Staff member view)
   Future<bool> getMyStaffProfile() async {
     _isLoading = true;

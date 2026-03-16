@@ -224,12 +224,17 @@ class _StaffListPageState extends State<StaffListPage> {
                   ...staffProvider.pendingStaff.map((staff) => StaffCard(
                         staff: staff,
                         onApprove: () => _decideStaffApproval(staff.id),
+                        onDelete: () => _confirmDeleteStaff(staff.id),
                       )),
                 ],
                 if (_selectedFilter == 'approved') ...[
                   const SectionTitle(title: 'Approved Staff'),
-                  ...staffProvider.approvedStaff
-                      .map((staff) => StaffCard(staff: staff)),
+                  ...staffProvider.approvedStaff.map(
+                    (staff) => StaffCard(
+                      staff: staff,
+                      onDelete: () => _confirmDeleteStaff(staff.id),
+                    ),
+                  ),
                 ],
                 if (_selectedFilter == 'all') ...[
                   if (staffProvider.pendingStaff.isNotEmpty) ...[
@@ -237,12 +242,17 @@ class _StaffListPageState extends State<StaffListPage> {
                     ...staffProvider.pendingStaff.map((staff) => StaffCard(
                           staff: staff,
                           onApprove: () => _decideStaffApproval(staff.id),
+                          onDelete: () => _confirmDeleteStaff(staff.id),
                         )),
                     const SizedBox(height: 24),
                   ],
                   const SectionTitle(title: 'Active Staff'),
-                  ...staffProvider.activeStaff
-                      .map((staff) => StaffCard(staff: staff)),
+                  ...staffProvider.activeStaff.map(
+                    (staff) => StaffCard(
+                      staff: staff,
+                      onDelete: () => _confirmDeleteStaff(staff.id),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -250,6 +260,55 @@ class _StaffListPageState extends State<StaffListPage> {
         },
       ),
     );
+  }
+
+  Future<void> _confirmDeleteStaff(String staffId) async {
+    if (_selectedLoungeId == null) return;
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Staff Member'),
+        content: const Text(
+          'Are you sure you want to remove this staff member from the lounge?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+
+    final staffProvider = context.read<LoungeStaffProvider>();
+    final success = await staffProvider.removeStaff(
+      loungeId: _selectedLoungeId!,
+      staffId: staffId,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Staff member removed successfully'
+              : (staffProvider.error ?? 'Failed to remove staff member'),
+        ),
+      ),
+    );
+
+    if (success) {
+      _loadStaffList(showLoading: false);
+    }
   }
 
   Future<void> _decideStaffApproval(String staffId) async {
@@ -334,11 +393,13 @@ class SectionTitle extends StatelessWidget {
 class StaffCard extends StatelessWidget {
   final dynamic staff; // LoungeStaff entity
   final VoidCallback? onApprove;
+  final VoidCallback? onDelete;
 
   const StaffCard({
     super.key,
     required this.staff,
     this.onApprove,
+    this.onDelete,
   });
 
   @override
@@ -387,7 +448,19 @@ class StaffCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 StatusChip(isApproved: staff.isApproved),
+                if (onDelete != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.error,
+                    ),
+                    tooltip: 'Delete staff member',
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 12),

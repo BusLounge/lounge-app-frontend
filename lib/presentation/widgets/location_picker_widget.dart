@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 
 class LocationPickerWidget extends StatefulWidget {
   final LatLng? initialLocation;
@@ -25,21 +29,122 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
   bool _hasLocationPermission = false;
   final TextEditingController _searchController = TextEditingController();
 
+  // Places Autocomplete
+  static const String _placesApiKey = 'AIzaSyAuA_RMUaOuqKOasnd5GU8MdYvrDmToXPg';
+  List<Map<String, String>> _suggestions = [];
+  bool _showSuggestions = false;
+  Timer? _debounce;
+
   @override
   void initState() {
     super.initState();
-    _selectedLocation =
-        widget.initialLocation ??
+    _selectedLocation = widget.initialLocation ??
         const LatLng(6.9271, 79.8612); // Default to Colombo, Sri Lanka
     _getAddressFromLatLng(_selectedLocation!);
     _initializeLocationPermission();
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
     _mapController?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      final text = _searchController.text.trim();
+      if (text.length >= 3) {
+        _fetchSuggestions(text);
+      } else {
+        setState(() {
+          _suggestions = [];
+          _showSuggestions = false;
+        });
+      }
+    });
+  }
+
+  Future<void> _fetchSuggestions(String input) async {
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+      '?input=${Uri.encodeComponent(input)}&key=$_placesApiKey',
+    );
+    try {
+      final response = await http.get(url);
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final predictions = data['predictions'] as List;
+          setState(() {
+            _suggestions = predictions
+                .map((p) => {
+                      'description': p['description'].toString(),
+                      'place_id': p['place_id'].toString(),
+                    })
+                .toList();
+            _showSuggestions = _suggestions.isNotEmpty;
+          });
+          return;
+        }
+      }
+      setState(() {
+        _suggestions = [];
+        _showSuggestions = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _suggestions = [];
+          _showSuggestions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectSuggestion(String placeId, String description) async {
+    setState(() {
+      _searchController.text = description;
+      _suggestions = [];
+      _showSuggestions = false;
+      _isLoading = true;
+    });
+
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/place/details/json'
+      '?place_id=${Uri.encodeComponent(placeId)}&fields=geometry&key=$_placesApiKey',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final loc = data['result']['geometry']['location'];
+          final location = LatLng(
+            (loc['lat'] as num).toDouble(),
+            (loc['lng'] as num).toDouble(),
+          );
+          _updateLocation(location);
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLngZoom(location, 16),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting location: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -87,9 +192,8 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
     try {
       final permission = await Geolocator.checkPermission();
       setState(() {
-        _hasLocationPermission =
-            permission == LocationPermission.always ||
-                permission == LocationPermission.whileInUse;
+        _hasLocationPermission = permission == LocationPermission.always ||
+            permission == LocationPermission.whileInUse;
       });
     } catch (_) {
       setState(() {
@@ -199,36 +303,105 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
             zoomControlsEnabled: false,
           ),
 
-          // Search bar
+          // Search bar + suggestions
           Positioned(
             top: 16,
             left: 16,
             right: 16,
-            child: Card(
-              elevation: 8,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.search, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: const InputDecoration(
-                          hintText: 'Search location...',
-                          border: InputBorder.none,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: const InputDecoration(
+                              hintText: 'Search location...',
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (_) {
+                              setState(() {
+                                _suggestions = [];
+                                _showSuggestions = false;
+                              });
+                              _searchLocation();
+                            },
+                          ),
                         ),
-                        onSubmitted: (_) => _searchLocation(),
+                        if (_searchController.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 20),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _suggestions = [];
+                                _showSuggestions = false;
+                              });
+                            },
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.search,
+                              color: Colors.blueAccent),
+                          tooltip: 'Search',
+                          onPressed: () {
+                            setState(() {
+                              _suggestions = [];
+                              _showSuggestions = false;
+                            });
+                            _searchLocation();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showSuggestions && _suggestions.isNotEmpty)
+                  Card(
+                    elevation: 8,
+                    margin: const EdgeInsets.only(top: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          itemCount: _suggestions.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final suggestion = _suggestions[index];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.location_on,
+                                  color: Colors.redAccent, size: 20),
+                              title: Text(
+                                suggestion['description'] ?? '',
+                                style: const TextStyle(fontSize: 13),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () => _selectSuggestion(
+                                suggestion['place_id']!,
+                                suggestion['description']!,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => _searchController.clear(),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
           ),
 

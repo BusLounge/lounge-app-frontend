@@ -42,6 +42,13 @@ abstract class LoungeStaffRemoteDataSource {
     required String approvalStatus,
   });
 
+  /// Remove staff member from a lounge (Lounge Owner only)
+  /// DELETE /api/v1/lounges/:lounge_id/staff/:staff_id
+  Future<void> removeStaff({
+    required String loungeId,
+    required String staffId,
+  });
+
   /// Get my staff profile (Staff member view)
   /// GET /api/v1/lounge-staff/profile
   Future<LoungeStaffModel> getMyStaffProfile();
@@ -278,6 +285,28 @@ class LoungeStaffRemoteDataSourceImpl implements LoungeStaffRemoteDataSource {
   }
 
   @override
+  Future<void> removeStaff({
+    required String loungeId,
+    required String staffId,
+  }) async {
+    try {
+      final response = await _loungeDio.delete(
+        '/api/v1/lounges/$loungeId/staff/$staffId',
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException(
+          'Failed to remove staff member',
+          'REMOVE_STAFF_FAILED',
+          response.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    }
+  }
+
+  @override
   Future<LoungeStaffModel> getMyStaffProfile() async {
     try {
       final response = await _loungeDio.get('/api/v1/lounge-staff/profile');
@@ -355,8 +384,7 @@ class LoungeStaffRemoteDataSourceImpl implements LoungeStaffRemoteDataSource {
     }
 
     if (responseData is Map<String, dynamic>) {
-      final dynamic unwrapped =
-          responseData['staff'] ??
+      final dynamic unwrapped = responseData['staff'] ??
           responseData['data'] ??
           responseData['result'];
 

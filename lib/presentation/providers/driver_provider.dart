@@ -97,6 +97,46 @@ class DriverProvider extends ChangeNotifier {
     }
   }
 
+  /// Remove a driver from lounge (Owner only)
+  Future<bool> removeDriver({
+    required String loungeId,
+    required String driverId,
+    bool showLoading = true,
+  }) async {
+    if (showLoading) {
+      _isLoading = true;
+    }
+    _error = null;
+    notifyListeners();
+
+    try {
+      await remoteDataSource.removeDriver(
+        loungeId: loungeId,
+        driverId: driverId,
+      );
+      _driverList.removeWhere((driver) => driver.id == driverId);
+      if (showLoading) {
+        _isLoading = false;
+      }
+      notifyListeners();
+      return true;
+    } on AppException catch (e) {
+      _error = e.message;
+      if (showLoading) {
+        _isLoading = false;
+      }
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      if (showLoading) {
+        _isLoading = false;
+      }
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Assign driver to booking
   Future<bool> assignDriverToBooking({
     required String bookingId,

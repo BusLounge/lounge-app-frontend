@@ -23,6 +23,13 @@ abstract class DriverRemoteDataSource {
   /// GET /api/v1/lounges/:lounge_id/drivers
   Future<List<DriverModel>> getDriversByLounge({required String loungeId});
 
+  /// Remove a driver from lounge (Lounge Owner only)
+  /// DELETE /api/v1/lounges/:lounge_id/drivers/:driver_id
+  Future<void> removeDriver({
+    required String loungeId,
+    required String driverId,
+  });
+
   /// Assign driver to booking
   /// POST /api/v1/lounge-booking-driver-assignments
   Future<LoungeBookingDriverAssignmentModel> assignDriverToBooking({
@@ -159,6 +166,40 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
       throw const ServerException(
         'Failed to parse driver data from response',
         'PARSE_ERROR',
+      );
+    }
+  }
+
+  @override
+  Future<void> removeDriver({
+    required String loungeId,
+    required String driverId,
+  }) async {
+    try {
+      final response = await _dio.delete(
+        '/api/v1/lounges/$loungeId/drivers/$driverId',
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null && status >= 200 && status < 300,
+        ),
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        throw ServerException(
+          'Failed to remove driver',
+          'REMOVE_DRIVER_FAILED',
+          statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } catch (e) {
+      throw ServerException(
+        'Failed to remove driver',
+        'REMOVE_DRIVER_FAILED',
       );
     }
   }
