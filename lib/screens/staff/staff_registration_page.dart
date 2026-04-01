@@ -43,6 +43,41 @@ class _StaffRegistrationPageState extends State<StaffRegistrationPage> {
   DateTime? _hiredDate;
   String? _selectedLoungeId;
 
+  bool _isValidNic(String value) {
+    final normalized = value.trim().toUpperCase();
+    final nicPattern = RegExp(r'^(\d{12}|\d{9}[A-Z])$');
+    return nicPattern.hasMatch(normalized);
+  }
+
+  bool _isValidEmail(String value) {
+    final normalized = value.trim();
+    final emailPattern = RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,}$');
+    return emailPattern.hasMatch(normalized);
+  }
+
+  bool _isValidPhoneNumber(String value) {
+    final digitsOnly = value.replaceAll(RegExp(r'[^0-9]'), '');
+    return digitsOnly.length == 10;
+  }
+
+  String _toUserFriendlyError(String? rawError) {
+    final message = (rawError ?? '').trim();
+    if (message.isEmpty) {
+      return 'Failed to complete registration';
+    }
+
+    final lower = message.toLowerCase();
+    if (lower.contains('email') &&
+        (lower.contains('already') ||
+            lower.contains('exists') ||
+            lower.contains('registered') ||
+            lower.contains('duplicate'))) {
+      return 'This email is already registered.';
+    }
+
+    return message;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -262,8 +297,7 @@ class _StaffRegistrationPageState extends State<StaffRegistrationPage> {
     } else {
       ScaffoldMessenger.of(navigatorContext).showSnackBar(
         SnackBar(
-          content:
-              Text(authProvider.error ?? 'Failed to complete registration'),
+          content: Text(_toUserFriendlyError(authProvider.error)),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -631,18 +665,8 @@ class _StaffRegistrationPageState extends State<StaffRegistrationPage> {
                       return 'Please enter phone number';
                     }
                     final trimmedValue = v.trim();
-                    // Remove common formatting characters
-                    final digitsOnly = trimmedValue.replaceAll(
-                      RegExp(r'[^0-9]'),
-                      '',
-                    );
-                    if (digitsOnly.length < 9 || digitsOnly.length > 10) {
-                      return 'Phone number must be 9-10 digits';
-                    }
-                    // Check for valid Sri Lankan mobile formats
-                    final phoneRegex = RegExp(r'^(0?7[0-9]{8}|\+947[0-9]{8})$');
-                    if (!phoneRegex.hasMatch(digitsOnly)) {
-                      return 'Please enter a valid Sri Lankan phone number';
+                    if (!_isValidPhoneNumber(trimmedValue)) {
+                      return 'Phone number must be exactly 10 digits';
                     }
                     return null;
                   },
@@ -660,10 +684,7 @@ class _StaffRegistrationPageState extends State<StaffRegistrationPage> {
                     if (v == null || v.trim().isEmpty) {
                       return 'Please enter email address';
                     }
-                    final emailRegex = RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    );
-                    if (!emailRegex.hasMatch(v.trim())) {
+                    if (!_isValidEmail(v)) {
                       return 'Please enter a valid email address';
                     }
                     return null;
@@ -683,14 +704,8 @@ class _StaffRegistrationPageState extends State<StaffRegistrationPage> {
                     if (v == null || v.trim().isEmpty) {
                       return 'Please enter NIC number';
                     }
-                    final trimmedValue = v.trim().toUpperCase();
-                    // Old format: 9 digits + V/X
-                    final oldNicRegex = RegExp(r'^\d{9}[VvXx]$');
-                    // New format: 12 digits
-                    final newNicRegex = RegExp(r'^\d{12}$');
-                    if (!oldNicRegex.hasMatch(trimmedValue) &&
-                        !newNicRegex.hasMatch(trimmedValue)) {
-                      return 'Invalid NIC format. Use 9 digits + V/X or 12 digits';
+                    if (!_isValidNic(v)) {
+                      return 'ID number format is incorrect. Use 12 digits or 9 digits + 1 letter.';
                     }
                     return null;
                   },

@@ -518,6 +518,23 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     if (error.response != null) {
       final statusCode = error.response!.statusCode;
       final data = error.response!.data;
+      final rawData = data?.toString().toLowerCase() ?? '';
+
+      final isDuplicateEmailError = (rawData.contains('users_email_key') ||
+          (rawData.contains('email') &&
+              (rawData.contains('duplicate') ||
+                  rawData.contains('already') ||
+                  rawData.contains('exists') ||
+                  rawData.contains('registered') ||
+                  rawData.contains('23505'))));
+
+      if (isDuplicateEmailError) {
+        return ServerException(
+          'This email is already registered.',
+          'EMAIL_ALREADY_REGISTERED',
+          statusCode,
+        );
+      }
 
       String message = 'An error occurred';
       String? code;

@@ -12,20 +12,6 @@ import '../../widgets/loading_overlay.dart';
 import '../../data/datasources/lounge_owner_remote_datasource.dart';
 import '../../core/di/injection_container.dart';
 
-/// Input formatter to block leading zero in phone numbers
-class NoLeadingZeroFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    if (newValue.text.isNotEmpty && newValue.text[0] == '0') {
-      return oldValue;
-    }
-    return newValue;
-  }
-}
-
 /// Extended registration form for Lounge Staff
 /// Collects: Full Name, NIC Number, Email, Lounge Selection, Phone, and OTP
 /// After submission, verifies OTP with all details and navigates to pending approval
@@ -53,6 +39,54 @@ class _StaffOtpRegistrationScreenState
   bool _isPhoneValid = false;
   bool _otpSent = false;
   bool _isSendingOtp = false;
+
+  bool _isValidNic(String value) {
+    final normalized = value.trim().toUpperCase();
+    final nicPattern = RegExp(r'^(\d{12}|\d{9}[A-Z])$');
+    return nicPattern.hasMatch(normalized);
+  }
+
+  bool _isValidEmail(String value) {
+    final normalized = value.trim();
+    final emailPattern = RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,}$');
+    return emailPattern.hasMatch(normalized);
+  }
+
+  String? _normalizeToLocalPhone(String value) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10 && digits.startsWith('0')) {
+      return digits;
+    }
+    if (digits.length == 11 && digits.startsWith('94')) {
+      return '0${digits.substring(2)}';
+    }
+    return null;
+  }
+
+  String _mapUserErrorMessage(String? message) {
+    final raw = (message ?? '').trim();
+    if (raw.isEmpty) {
+      return 'Registration failed. Please try again.';
+    }
+
+    final lower = raw.toLowerCase();
+    if ((lower.contains('failed to create user account') ||
+            lower.contains('user_creation_failed')) &&
+        !lower.contains('email')) {
+      return 'This email is already registered. Please retype a different email address.';
+    }
+
+    if ((lower.contains('email') || lower.contains('users_email_key')) &&
+        (lower.contains('already') ||
+            lower.contains('duplicate') ||
+            lower.contains('exists') ||
+            lower.contains('registered') ||
+            lower.contains('23505'))) {
+      return 'This email is already registered.';
+    }
+
+    return raw;
+  }
 
   // District → Lounge Owners mapping
   Map<String, List<Map<String, dynamic>>> _districtOwnersMap = {};
@@ -181,7 +215,7 @@ class _StaffOtpRegistrationScreenState
       if (_completePhoneNumber.isEmpty || !_isPhoneValid) {
         ErrorDialog.show(
           context: context,
-          message: AppConstants.invalidPhoneError,
+          message: 'Phone number must be exactly 10 digits',
         );
         return;
       }
@@ -211,9 +245,9 @@ class _StaffOtpRegistrationScreenState
           phoneNumber: _completePhoneNumber,
           otp: _otpController.text,
           loungeId: _selectedLoungeId!,
-          fullName: _fullNameController.text,
-          nicNumber: _nicController.text,
-          email: _emailController.text,
+          fullName: _fullNameController.text.trim(),
+          nicNumber: _nicController.text.trim().toUpperCase(),
+          email: _emailController.text.trim(),
         );
 
         if (!mounted) return;
@@ -233,8 +267,9 @@ class _StaffOtpRegistrationScreenState
           _logger.e('❌ Registration failed: ${result['message']}');
           ErrorDialog.show(
             context: context,
-            message:
-                result['message'] ?? 'Registration failed. Please try again.',
+            message: _mapUserErrorMessage(
+              (result['message'] as String?) ?? authProvider.error,
+            ),
           );
         }
       } catch (e) {
@@ -259,7 +294,7 @@ class _StaffOtpRegistrationScreenState
     if (_completePhoneNumber.isEmpty || !_isPhoneValid) {
       ErrorDialog.show(
         context: context,
-        message: AppConstants.invalidPhoneError,
+        message: 'Phone number must be exactly 10 digits',
       );
       return;
     }
@@ -377,6 +412,9 @@ class _StaffOtpRegistrationScreenState
                       if (value?.isEmpty ?? true) {
                         return 'NIC number is required';
                       }
+                      if (!_isValidNic(value!)) {
+                        return 'ID number format is incorrect. Use 12 digits or 9 digits + 1 letter.';
+                      }
                       return null;
                     },
                   ),
@@ -398,7 +436,7 @@ class _StaffOtpRegistrationScreenState
                       if (value?.isEmpty ?? true) {
                         return 'Email is required';
                       }
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value!)) {
+                      if (!_isValidEmail(value!)) {
                         return 'Please enter a valid email';
                       }
                       return null;
@@ -661,7 +699,7 @@ class _StaffOtpRegistrationScreenState
                   IntlPhoneField(
                     controller: _phoneController,
                     inputFormatters: [
-                      NoLeadingZeroFormatter(),
+                      FilteringTextInputFormatter.allow(RegExp(r'[1-9]')),
                     ],
                     decoration: const InputDecoration(
                       labelText: 'Phone Number',
@@ -671,14 +709,23 @@ class _StaffOtpRegistrationScreenState
                     initialCountryCode: AppConstants.countryISOCode,
                     disableLengthCheck: false,
                     onChanged: (phone) {
+                      final normalized = _normalizeToLocalPhone(
+                        phone.completeNumber,
+                      );
                       setState(() {
-                        _completePhoneNumber = phone.completeNumber;
-                        _isPhoneValid = phone.isValidNumber();
+                        _completePhoneNumber = normalized ?? '';
+                        _isPhoneValid = normalized != null;
                       });
                     },
                     validator: (phone) {
                       if (phone == null || phone.number.isEmpty) {
                         return 'Phone number is required';
+                      }
+                      final normalized = _normalizeToLocalPhone(
+                        phone.completeNumber,
+                      );
+                      if (normalized == null) {
+                        return 'Phone number must be exactly 10 digits';
                       }
                       return null;
                     },

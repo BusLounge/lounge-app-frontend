@@ -96,7 +96,11 @@ class AuthProvider extends ChangeNotifier {
       (failure) {
         _error = _mapFailureToMessage(failure);
         _setLoading(false);
-        return {'success': false, 'nextRoute': '/otp-verification'};
+        return {
+          'success': false,
+          'nextRoute': '/otp-verification',
+          'message': _error,
+        };
       },
       (verifyResult) {
         // Update UI state
@@ -394,6 +398,23 @@ class AuthProvider extends ChangeNotifier {
 
   /// Map domain failures to user-friendly messages
   String _mapFailureToMessage(dynamic failure) {
-    return failure.toString().replaceFirst('Failure: ', '');
+    final rawMessage = failure.toString().replaceFirst('Failure: ', '').trim();
+    final lower = rawMessage.toLowerCase();
+
+    if ((lower.contains('failed to create user account') ||
+            lower.contains('user_creation_failed')) &&
+        !lower.contains('email')) {
+      return 'This email is already registered. Please retype a different email address.';
+    }
+
+    if (lower.contains('email') &&
+        (lower.contains('already') ||
+            lower.contains('exists') ||
+            lower.contains('registered') ||
+            lower.contains('duplicate'))) {
+      return 'This email is already registered.';
+    }
+
+    return rawMessage;
   }
 }
