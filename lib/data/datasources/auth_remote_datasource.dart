@@ -520,6 +520,20 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final data = error.response!.data;
       final rawData = data?.toString().toLowerCase() ?? '';
 
+      final isLoungeNotApprovedError = (rawData.contains('lounge') &&
+              rawData.contains('not') &&
+              rawData.contains('approved')) ||
+          rawData.contains('lounge_not_approved') ||
+          rawData.contains('selected_lounge_not_approved');
+
+      if (isLoungeNotApprovedError) {
+        return ServerException(
+          'The selected lounge is not yet approved. Please try another lounge.',
+          'LOUNGE_NOT_APPROVED',
+          statusCode,
+        );
+      }
+
       final isDuplicateEmailError = (rawData.contains('users_email_key') ||
           (rawData.contains('email') &&
               (rawData.contains('duplicate') ||

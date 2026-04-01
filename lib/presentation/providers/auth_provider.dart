@@ -159,7 +159,11 @@ class AuthProvider extends ChangeNotifier {
       (failure) {
         _error = _mapFailureToMessage(failure);
         _setLoading(false);
-        return {'success': false, 'nextRoute': '/otp-verification'};
+        return {
+          'success': false,
+          'nextRoute': '/otp-verification',
+          'message': _error,
+        };
       },
       (verifyResult) {
         // Update UI state
@@ -400,6 +404,14 @@ class AuthProvider extends ChangeNotifier {
   String _mapFailureToMessage(dynamic failure) {
     final rawMessage = failure.toString().replaceFirst('Failure: ', '').trim();
     final lower = rawMessage.toLowerCase();
+
+    if ((lower.contains('lounge') &&
+            lower.contains('not') &&
+            lower.contains('approved')) ||
+        lower.contains('lounge_not_approved') ||
+        lower.contains('selected_lounge_not_approved')) {
+      return 'The selected lounge is not yet approved. Please try another lounge.';
+    }
 
     if ((lower.contains('failed to create user account') ||
             lower.contains('user_creation_failed')) &&

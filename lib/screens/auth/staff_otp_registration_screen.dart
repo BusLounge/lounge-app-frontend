@@ -12,6 +12,23 @@ import '../../widgets/loading_overlay.dart';
 import '../../data/datasources/lounge_owner_remote_datasource.dart';
 import '../../core/di/injection_container.dart';
 
+class NoLeadingZeroFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final oldText = oldValue.text;
+    final newText = newValue.text;
+
+    if (oldText.isEmpty && newText.startsWith('0')) {
+      return oldValue;
+    }
+
+    return newValue;
+  }
+}
+
 /// Extended registration form for Lounge Staff
 /// Collects: Full Name, NIC Number, Email, Lounge Selection, Phone, and OTP
 /// After submission, verifies OTP with all details and navigates to pending approval
@@ -70,6 +87,14 @@ class _StaffOtpRegistrationScreenState
     }
 
     final lower = raw.toLowerCase();
+    if ((lower.contains('lounge') &&
+            lower.contains('not') &&
+            lower.contains('approved')) ||
+        lower.contains('lounge_not_approved') ||
+        lower.contains('selected_lounge_not_approved')) {
+      return 'The selected lounge is not yet approved. Please try another lounge.';
+    }
+
     if ((lower.contains('failed to create user account') ||
             lower.contains('user_creation_failed')) &&
         !lower.contains('email')) {
@@ -699,7 +724,7 @@ class _StaffOtpRegistrationScreenState
                   IntlPhoneField(
                     controller: _phoneController,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[1-9]')),
+                      NoLeadingZeroFormatter(),
                     ],
                     decoration: const InputDecoration(
                       labelText: 'Phone Number',
