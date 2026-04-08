@@ -2,14 +2,14 @@ class ApiConfig {
   // ============================================
   // BACKEND CONFIGURATION
   // ============================================
-    // Default backend points to the Choreo deployment.
-    // Override with --dart-define=LOCAL_BACKEND_URL=...
-    static const String _defaultBackendUrl =
-            'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
+  // Default backend points to the Choreo deployment.
+  // Override with --dart-define=LOCAL_BACKEND_URL=...
+  static const String _defaultBackendUrl =
+      'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
 
   static const String localBaseUrl = String.fromEnvironment(
     'LOCAL_BACKEND_URL',
-        defaultValue: _defaultBackendUrl,
+    defaultValue: _defaultBackendUrl,
   );
 
   // Kept for backward compatibility
@@ -36,7 +36,7 @@ class ApiConfig {
   static const String loungeStaffProfileUpdateEndpoint =
       '/api/v1/lounge-staff/profile/update';
 
-    // Helper methods to get the correct base URL.
+  // Helper methods to get the correct base URL.
   static String getAuthBaseUrl() => localBaseUrl;
   static String getLoungeBaseUrl() => localBaseUrl;
 
@@ -59,7 +59,7 @@ class ApiConfig {
   static String get loungeStaffProfileUpdateUrl =>
       '${getLoungeBaseUrl()}$loungeStaffProfileUpdateEndpoint';
 
-    // Lounge-specific APIs use the same backend base URL.
+  // Lounge-specific APIs use the same backend base URL.
   static String loungeUrl(String loungeId, String path) =>
       '${getLoungeBaseUrl()}/api/v1/lounges/$loungeId$path';
   static String loungeStaffUrl(String loungeId) =>
