@@ -10,8 +10,58 @@ class LoungeRemoteDataSource {
 
   LoungeRemoteDataSource({required this.apiClient});
 
+  Map<String, dynamic> _normalizeMapResponse(dynamic responseData) {
+    if (responseData is! Map<String, dynamic>) {
+      return <String, dynamic>{};
+    }
+
+    final nested = responseData['data'] ??
+        responseData['lounge'] ??
+        responseData['result'];
+    if (nested is Map<String, dynamic>) {
+      return <String, dynamic>{
+        ...responseData,
+        ...nested,
+      };
+    }
+
+    return responseData;
+  }
+
+  String? _extractLoungeId(dynamic responseData) {
+    final data = _normalizeMapResponse(responseData);
+    final nestedData = data['data'];
+    final loungeData = data['lounge'];
+
+    return data['lounge_id'] as String? ??
+        data['id'] as String? ??
+        (nestedData is Map<String, dynamic>
+            ? (nestedData['lounge_id'] as String? ??
+                nestedData['id'] as String?)
+            : null) ??
+        (loungeData is Map<String, dynamic>
+            ? (loungeData['lounge_id'] as String? ??
+                loungeData['id'] as String?)
+            : null);
+  }
+
+  /// Helper to safely extract error message from various response formats
+  String _extractErrorMessage(dynamic responseData, DioException e) {
+    // If response is a Map with 'message' key
+    if (responseData is Map<String, dynamic> &&
+        responseData.containsKey('message')) {
+      return responseData['message'] as String? ?? 'Unknown error';
+    }
+    // If response is just a plain string (e.g., "404 page not found")
+    if (responseData is String && responseData.isNotEmpty) {
+      return responseData;
+    }
+    // Fallback to DioException message
+    return e.message ?? 'Unknown error';
+  }
+
   /// Add a new lounge (Step 3)
-  /// POST /api/v1/lounge-owner/register/add-lounge
+  /// POST /api/v1/lounges
   Future<Map<String, dynamic>> addLounge({
     required String loungeName,
     required String address,
@@ -45,7 +95,7 @@ class LoungeRemoteDataSource {
         'longitude': longitude.toString(),
         'amenities': facilities,
         'images': loungePhotos,
-        'routes': routes.map((r) => r.toJson()).toList(),
+        'routes': routes.map(_toCreateRouteJson).toList(),
       };
 
       // Add optional fields if provided
@@ -73,26 +123,31 @@ class LoungeRemoteDataSource {
       print('   routes: ${data['routes']}');
 
       final response = await apiClient.post(
-        '/api/v1/lounge-owner/register/add-lounge',
+        '/api/v1/lounges',
         data: data,
       );
 
       print('📍 Add Lounge Response Status: ${response.statusCode}');
       print('📍 Add Lounge Response Data: ${response.data}');
 
-      if (response.statusCode != 201) {
+      if (response.statusCode != 201 && response.statusCode != 200) {
         throw ServerException(
           'Failed to add lounge - Status: ${response.statusCode}',
         );
       }
 
-      return response.data as Map<String, dynamic>;
+      final normalized = _normalizeMapResponse(response.data);
+      final loungeId = _extractLoungeId(normalized);
+
+      print('📍 Add Lounge Normalized Response: $normalized');
+      print('📍 Add Lounge Extracted ID: $loungeId');
+
+      return normalized;
     } on DioException catch (e) {
       print('❌ Add Lounge DioException: ${e.type}');
       print('❌ Response Status: ${e.response?.statusCode}');
       print('❌ Response Data: ${e.response?.data}');
-      final errorMessage =
-          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      final errorMessage = _extractErrorMessage(e.response?.data, e);
       throw ServerException('Add lounge failed: $errorMessage');
     } catch (e) {
       print('❌ Add Lounge Error: $e');
@@ -137,8 +192,7 @@ class LoungeRemoteDataSource {
       print('❌ GetMyLounges DioException: ${e.type}');
       print('❌ Response Status: ${e.response?.statusCode}');
       print('❌ Response Data: ${e.response?.data}');
-      final errorMessage =
-          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      final errorMessage = _extractErrorMessage(e.response?.data, e);
       throw ServerException('Get lounges failed: $errorMessage');
     } catch (e) {
       print('❌ GetMyLounges Error: $e');
@@ -152,6 +206,9 @@ class LoungeRemoteDataSource {
     try {
       final response = await apiClient.get('/api/v1/lounges/$id');
 
+      print('📍 GetLoungeById Response Status: ${response.statusCode}');
+      print('📍 GetLoungeById Raw Response: ${response.data}');
+
       if (response.statusCode != 200) {
         throw ServerException('Failed to get lounge');
       }
@@ -162,8 +219,15 @@ class LoungeRemoteDataSource {
             responseData['lounge'] ??
             responseData['result'];
         if (nested is Map<String, dynamic>) {
-          return nested;
+          final merged = <String, dynamic>{
+            ...responseData,
+            ...nested,
+          };
+          print('📍 GetLoungeById Nested Data: $nested');
+          print('📍 GetLoungeById Merged Data: $merged');
+          return merged;
         }
+        print('📍 GetLoungeById Using Root Data: $responseData');
         return responseData;
       }
 
@@ -180,8 +244,11 @@ class LoungeRemoteDataSource {
     required String loungeName,
     required String address,
     required String contactPhone,
-    String? latitude,
-    String? longitude,
+    required String latitude,
+    required String longitude,
+    String? state,
+    String? postalCode,
+    String? district,
     int? capacity,
     String? price1Hour,
     String? price2Hours,
@@ -193,19 +260,27 @@ class LoungeRemoteDataSource {
     required List<LoungeRouteModel> routes,
   }) async {
     try {
+      if (routes.isEmpty) {
+        throw ServerException(
+            'At least one route is required to update lounge');
+      }
+
       final data = <String, dynamic>{
         'lounge_name': loungeName,
         'address': address,
         'contact_phone': contactPhone,
+        'latitude': latitude,
+        'longitude': longitude,
         'amenities': amenities,
         'images': images,
-        'routes': routes.map((route) => route.toJson()).toList(),
+        'routes': routes.map(_toUpdateRouteJson).toList(),
       };
 
-      if (latitude != null && latitude.isNotEmpty) data['latitude'] = latitude;
-      if (longitude != null && longitude.isNotEmpty) {
-        data['longitude'] = longitude;
+      if (state != null && state.isNotEmpty) data['state'] = state;
+      if (postalCode != null && postalCode.isNotEmpty) {
+        data['postal_code'] = postalCode;
       }
+      if (district != null && district.isNotEmpty) data['district'] = district;
       if (capacity != null) data['capacity'] = capacity;
       if (price1Hour != null && price1Hour.isNotEmpty) {
         data['price_1_hour'] = price1Hour;
@@ -237,12 +312,27 @@ class LoungeRemoteDataSource {
 
       return {'message': 'Lounge updated successfully', 'lounge_id': id};
     } on DioException catch (e) {
-      final errorMessage =
-          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      final errorMessage = _extractErrorMessage(e.response?.data, e);
       throw ServerException('Update lounge failed: $errorMessage');
     } catch (e) {
       throw ServerException(e.toString());
     }
+  }
+
+  Map<String, dynamic> _toUpdateRouteJson(LoungeRouteModel route) {
+    return {
+      'master_route_id': route.masterRouteId,
+      'stop_before_id': route.stopBeforeId,
+      'stop_after_id': route.stopAfterId,
+    };
+  }
+
+  Map<String, dynamic> _toCreateRouteJson(LoungeRouteModel route) {
+    return {
+      'master_route_id': route.masterRouteId,
+      'stop_before_id': route.stopBeforeId,
+      'stop_after_id': route.stopAfterId,
+    };
   }
 
   /// Delete a specific lounge by ID
@@ -257,8 +347,7 @@ class LoungeRemoteDataSource {
         );
       }
     } on DioException catch (e) {
-      final errorMessage =
-          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      final errorMessage = _extractErrorMessage(e.response?.data, e);
       throw ServerException('Delete lounge failed: $errorMessage');
     } catch (e) {
       throw ServerException(e.toString());
@@ -302,8 +391,7 @@ class LoungeRemoteDataSource {
       print('❌ GetAllLounges DioException: ${e.type}');
       print('❌ Response Status: ${e.response?.statusCode}');
       print('❌ Response Data: ${e.response?.data}');
-      final errorMessage =
-          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      final errorMessage = _extractErrorMessage(e.response?.data, e);
       throw ServerException('Get all lounges failed: $errorMessage');
     } catch (e) {
       print('❌ GetAllLounges Error: $e');

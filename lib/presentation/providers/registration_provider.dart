@@ -456,6 +456,10 @@ class RegistrationProvider with ChangeNotifier {
         return null;
       },
       (lounge) {
+        print('📍 getLoungeDetails parsed lounge: ${lounge.loungeName}');
+        print('   state: ${lounge.state}');
+        print('   postalCode: ${lounge.postalCode}');
+        print('   district: ${lounge.district}');
         final index = _myLounges.indexWhere((item) => item.id == lounge.id);
         if (index != -1) {
           _myLounges[index] = lounge;

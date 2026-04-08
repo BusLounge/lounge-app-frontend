@@ -2,9 +2,18 @@ class ApiConfig {
   // ============================================
   // BACKEND CONFIGURATION
   // ============================================
-  // All requests should use the deployed backend.
-  static const String localBaseUrl =
-      'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
+  // Default local backend for Android emulator. Override with:
+  // --dart-define=LOCAL_BACKEND_URL=http://192.168.1.25:8080
+  // or --dart-define=LOCAL_BACKEND_HOST=192.168.1.25 --dart-define=LOCAL_BACKEND_PORT=8080
+  static const String _defaultLocalBackendHost =
+      String.fromEnvironment('LOCAL_BACKEND_HOST', defaultValue: '10.0.2.2');
+  static const String _defaultLocalBackendPort =
+      String.fromEnvironment('LOCAL_BACKEND_PORT', defaultValue: '8080');
+
+  static const String localBaseUrl = String.fromEnvironment(
+    'LOCAL_BACKEND_URL',
+    defaultValue: 'http://$_defaultLocalBackendHost:$_defaultLocalBackendPort',
+  );
 
   // Kept for backward compatibility
   static const String choreoBaseUrl = localBaseUrl;

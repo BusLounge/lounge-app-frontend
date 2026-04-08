@@ -10,6 +10,7 @@ class Lounge extends Equatable {
   final String? description;
   final String address;
   final String? state;
+  final String? district;
   final String? country;
   final String? postalCode;
   final String? latitude; // Required for map
@@ -46,6 +47,7 @@ class Lounge extends Equatable {
     this.description,
     required this.address,
     this.state,
+    this.district,
     this.country,
     this.postalCode,
     this.latitude,
@@ -74,6 +76,7 @@ class Lounge extends Equatable {
         description,
         address,
         state,
+        district,
         country,
         postalCode,
         latitude,
@@ -114,6 +117,7 @@ class Lounge extends Equatable {
     String? description,
     String? address,
     String? state,
+    String? district,
     String? country,
     String? postalCode,
     String? latitude,
@@ -140,6 +144,7 @@ class Lounge extends Equatable {
       description: description ?? this.description,
       address: address ?? this.address,
       state: state ?? this.state,
+      district: district ?? this.district,
       country: country ?? this.country,
       postalCode: postalCode ?? this.postalCode,
       latitude: latitude ?? this.latitude,

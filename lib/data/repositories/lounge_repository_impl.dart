@@ -16,6 +16,22 @@ class LoungeRepositoryImpl implements LoungeRepository {
 
   LoungeRepositoryImpl({required this.remoteDataSource});
 
+  String? _extractCreatedLoungeId(Map<String, dynamic> response) {
+    final nestedData = response['data'];
+    final loungeData = response['lounge'];
+
+    return response['lounge_id'] as String? ??
+        response['id'] as String? ??
+        (nestedData is Map<String, dynamic>
+            ? (nestedData['lounge_id'] as String? ??
+                nestedData['id'] as String?)
+            : null) ??
+        (loungeData is Map<String, dynamic>
+            ? (loungeData['lounge_id'] as String? ??
+                loungeData['id'] as String?)
+            : null);
+  }
+
   @override
   Future<Either<Failure, String>> addLounge({
     required String loungeName,
@@ -67,8 +83,8 @@ class LoungeRepositoryImpl implements LoungeRepository {
 
       print('📍 Repository - Response received: $response');
 
-      // Extract lounge_id from response
-      final loungeId = response['lounge_id'] as String?;
+      // Extract lounge ID from multiple possible API response shapes
+      final loungeId = _extractCreatedLoungeId(response);
       if (loungeId == null || loungeId.isEmpty) {
         print('❌ Repository - No lounge_id in response');
         return Left(ServerFailure('Server did not return a valid lounge ID'));
@@ -161,13 +177,31 @@ class LoungeRepositoryImpl implements LoungeRepository {
   @override
   Future<Either<Failure, void>> updateLounge(Lounge lounge) async {
     try {
+      final latitude = lounge.latitude?.trim() ?? '';
+      final longitude = lounge.longitude?.trim() ?? '';
+      final routes = lounge.routes ?? const [];
+
+      if (latitude.isEmpty || longitude.isEmpty) {
+        return Left(
+          ServerFailure('Latitude and longitude are required to update lounge'),
+        );
+      }
+
+      if (routes.isEmpty) {
+        return Left(
+            ServerFailure('At least one route is required to update lounge'));
+      }
+
       await remoteDataSource.updateLounge(
         id: lounge.id,
         loungeName: lounge.loungeName,
         address: lounge.address,
         contactPhone: lounge.contactPhone ?? '',
-        latitude: lounge.latitude,
-        longitude: lounge.longitude,
+        latitude: latitude,
+        longitude: longitude,
+        state: lounge.state,
+        postalCode: lounge.postalCode,
+        district: lounge.district,
         capacity: lounge.capacity,
         price1Hour: lounge.price1Hour,
         price2Hours: lounge.price2Hours,
@@ -176,9 +210,8 @@ class LoungeRepositoryImpl implements LoungeRepository {
         description: lounge.description,
         amenities: lounge.amenities ?? const [],
         images: lounge.images ?? const [],
-        routes: (lounge.routes ?? const [])
-            .map((route) => LoungeRouteModel.fromEntity(route))
-            .toList(),
+        routes:
+            routes.map((route) => LoungeRouteModel.fromEntity(route)).toList(),
       );
       return const Right(null);
     } on ServerException catch (e) {

@@ -9,6 +9,7 @@ class LoungeModel extends Lounge {
     super.description,
     required super.address,
     super.state,
+    super.district,
     super.country,
     super.postalCode,
     super.latitude,
@@ -67,10 +68,20 @@ class LoungeModel extends Lounge {
     if (value is String) return value;
 
     if (value is Map<String, dynamic>) {
-      final valid = value['Valid'] as bool? ?? false;
-      if (!valid) return null;
-      final strVal = value['String'];
+      // Support both Go-style wrappers and lowercase variants.
+      final dynamic validRaw = value['Valid'] ?? value['valid'];
+      if (validRaw is bool && !validRaw) return null;
+      if (validRaw is String && validRaw.toLowerCase() == 'false') return null;
+
+      final dynamic strVal = value['String'] ??
+          value['string'] ??
+          value['value'] ??
+          value['Value'];
       if (strVal != null) return strVal.toString();
+
+      // Some APIs return direct named fields in maps.
+      final dynamic nameVal = value['name'] ?? value['district'];
+      if (nameVal != null) return nameVal.toString();
     }
 
     return value.toString();
@@ -82,10 +93,16 @@ class LoungeModel extends Lounge {
     if (value is int) return value;
 
     if (value is Map<String, dynamic>) {
-      final valid = value['Valid'] as bool? ?? false;
-      if (!valid) return null;
-      final intVal = value['Int64'] ?? value['Int32'];
-      if (intVal != null) return intVal as int;
+      final dynamic validRaw = value['Valid'] ?? value['valid'];
+      if (validRaw is bool && !validRaw) return null;
+
+      final dynamic intVal = value['Int64'] ??
+          value['int64'] ??
+          value['Int32'] ??
+          value['int32'] ??
+          value['value'];
+      if (intVal is int) return intVal;
+      if (intVal is String) return int.tryParse(intVal);
     }
 
     if (value is String) {
@@ -112,22 +129,53 @@ class LoungeModel extends Lounge {
       updatedAt = createdAt;
     }
 
+    final location = json['location'] is Map<String, dynamic>
+        ? json['location'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+
+    final dynamic rawRoutes =
+        json['routes'] ?? json['lounge_routes'] ?? json['route_details'];
+    List<LoungeRouteModel>? parsedRoutes;
+    if (rawRoutes is List) {
+      parsedRoutes = rawRoutes
+          .whereType<Map<String, dynamic>>()
+          .map(LoungeRouteModel.fromJson)
+          .toList();
+    } else if (rawRoutes is Map<String, dynamic>) {
+      final nestedList = rawRoutes['items'] ?? rawRoutes['data'];
+      if (nestedList is List) {
+        parsedRoutes = nestedList
+            .whereType<Map<String, dynamic>>()
+            .map(LoungeRouteModel.fromJson)
+            .toList();
+      }
+    }
+
     return LoungeModel(
-      id: json['id'] as String,
-      loungeOwnerId: json['lounge_owner_id'] as String? ?? '',
-      loungeName: json['lounge_name'] as String,
+      id: (json['id'] ?? '').toString(),
+      loungeOwnerId: (json['lounge_owner_id'] ?? '').toString(),
+      loungeName: _extractString(json['lounge_name']) ?? '',
       description: _extractString(json['description']),
       address: _extractString(json['address']) ?? '',
-      state: _extractString(json['state']),
+      state: _extractString(
+        json['state'] ??
+            json['state_province'] ??
+            json['province'] ??
+            location['state'],
+      ),
+      district: _extractString(json['district']),
       country: _extractString(json['country']),
-      postalCode: _extractString(json['postal_code']),
+      postalCode: _extractString(
+        json['postal_code'] ??
+            json['postalCode'] ??
+            json['zip_code'] ??
+            location['postal_code'],
+      ),
       latitude: _extractString(json['latitude']),
       longitude: _extractString(json['longitude']),
       contactPhone: _extractString(json['contact_phone']),
       capacity: _extractInt(json['capacity']),
-      routes: (json['routes'] as List<dynamic>?)
-          ?.map((r) => LoungeRouteModel.fromJson(r as Map<String, dynamic>))
-          .toList(),
+      routes: parsedRoutes,
       price1Hour: _extractString(json['price_1_hour']),
       price2Hours: _extractString(json['price_2_hours']),
       price3Hours: _extractString(json['price_3_hours']),
@@ -135,9 +183,8 @@ class LoungeModel extends Lounge {
       amenities: (json['amenities'] as List<dynamic>?)
           ?.map((a) => a as String)
           .toList(),
-      images: (json['images'] as List<dynamic>?)
-          ?.map((i) => i as String)
-          .toList(),
+      images:
+          (json['images'] as List<dynamic>?)?.map((i) => i as String).toList(),
       status: json['status'] as String? ?? 'pending',
       isOperational: json['is_operational'] as bool? ?? true,
       averageRating: _extractString(json['average_rating']),
@@ -151,13 +198,15 @@ class LoungeModel extends Lounge {
       'lounge_name': loungeName,
       'description': description,
       'address': address,
+      'state': state,
+      'postal_code': postalCode,
+      'district': district,
       'contact_phone': contactPhone,
       'latitude': latitude,
       'longitude': longitude,
       'capacity': capacity,
-      'routes': routes
-          ?.map((r) => LoungeRouteModel.fromEntity(r).toJson())
-          .toList(),
+      'routes':
+          routes?.map((r) => LoungeRouteModel.fromEntity(r).toJson()).toList(),
       'price_1_hour': price1Hour,
       'price_2_hours': price2Hours,
       'price_3_hours': price3Hours,
@@ -167,4 +216,3 @@ class LoungeModel extends Lounge {
     };
   }
 }
-

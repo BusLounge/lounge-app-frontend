@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
+import '../../core/di/injection_container.dart';
+import '../../data/datasources/lounge_owner_remote_datasource.dart';
+import '../../data/datasources/route_remote_datasource.dart';
+import '../../data/models/route_model.dart';
+import '../../domain/entities/lounge_route.dart';
 import '../../presentation/providers/registration_provider.dart';
 import '../../domain/entities/lounge.dart';
 
@@ -17,6 +22,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   Lounge? _selectedLounge;
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  bool _isLoadingLounge = true;
 
   final _loungeNameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
@@ -29,24 +35,44 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   final _price3HourCtrl = TextEditingController();
   final _priceUntilBusCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
+  final _stateCtrl = TextEditingController();
+  final _postalCodeCtrl = TextEditingController();
+  final _amenitiesCtrl = TextEditingController();
+  final _imagesCtrl = TextEditingController();
+
+  late LoungeOwnerRemoteDataSource _loungeOwnerRemoteDataSource;
+  List<Map<String, dynamic>> _districts = [];
+  String? _selectedDistrictId;
+  bool _isLoadingDistricts = false;
+  String? _districtsError;
+
+  final List<Map<String, dynamic>> _selectedRoutes = [];
 
   @override
   void initState() {
     super.initState();
+    _loungeOwnerRemoteDataSource =
+        InjectionContainer().loungeOwnerRemoteDataSource;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (widget.initialLounge != null) {
-        setState(() {
-          _selectedLounge = widget.initialLounge;
-          _populateForm(widget.initialLounge!);
-        });
+      await _loadDistricts();
 
+      if (widget.initialLounge != null) {
         final latest = await Provider.of<RegistrationProvider>(
           context,
           listen: false,
         ).getLoungeDetails(widget.initialLounge!.id);
 
-        if (!mounted || latest == null) return;
-        _syncSelectedLounge(latest);
+        if (!mounted) return;
+
+        setState(() {
+          _selectedLounge = latest ?? widget.initialLounge;
+          _populateForm(_selectedLounge!);
+          _isLoadingLounge = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingLounge = false;
+        });
       }
     });
   }
@@ -64,6 +90,10 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _price3HourCtrl.dispose();
     _priceUntilBusCtrl.dispose();
     _descriptionCtrl.dispose();
+    _stateCtrl.dispose();
+    _postalCodeCtrl.dispose();
+    _amenitiesCtrl.dispose();
+    _imagesCtrl.dispose();
     super.dispose();
   }
 
@@ -161,12 +191,32 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _price3HourCtrl.text = lounge.price3Hours?.toString() ?? '';
     _priceUntilBusCtrl.text = lounge.priceUntilBus?.toString() ?? '';
     _descriptionCtrl.text = lounge.description ?? '';
+    _stateCtrl.text = lounge.state ?? '';
+    _postalCodeCtrl.text = lounge.postalCode ?? '';
+    _selectedDistrictId = lounge.district;
+    _amenitiesCtrl.text = (lounge.amenities ?? const []).join(', ');
+    _imagesCtrl.text = (lounge.images ?? const []).join('\n');
+
+    _selectedRoutes
+      ..clear()
+      ..addAll(
+        (lounge.routes ?? const []).map(
+          (route) => {
+            'routeId': route.masterRouteId,
+            'stopBeforeId': route.stopBeforeId,
+            'stopAfterId': route.stopAfterId,
+            'routeNumber': route.masterRouteId,
+            'routeDisplay': route.masterRouteId,
+            'stopBeforeName': route.stopBeforeId,
+            'stopAfterName': route.stopAfterId,
+          },
+        ),
+      );
   }
 
   Future<void> _loadSelectedLounge(Lounge lounge) async {
     setState(() {
-      _selectedLounge = lounge;
-      _populateForm(lounge);
+      _isLoadingLounge = true;
     });
 
     final latest = await Provider.of<RegistrationProvider>(
@@ -174,19 +224,12 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
       listen: false,
     ).getLoungeDetails(lounge.id);
 
-    if (!mounted || latest == null) return;
-    _syncSelectedLounge(latest);
-  }
-
-  void _syncSelectedLounge(Lounge latest) {
-    final lounges =
-        Provider.of<RegistrationProvider>(context, listen: false).myLounges;
-    final matched = lounges.where((item) => item.id == latest.id).toList();
-    final selected = matched.isNotEmpty ? matched.first : latest;
+    if (!mounted) return;
 
     setState(() {
-      _selectedLounge = selected;
-      _populateForm(selected);
+      _selectedLounge = latest ?? lounge;
+      _populateForm(_selectedLounge!);
+      _isLoadingLounge = false;
     });
   }
 
@@ -204,9 +247,41 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
       listen: false,
     );
 
+    if (_selectedRoutes.isEmpty) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Please add at least one route',
+          ),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final parsedRoutes = _selectedRoutes
+        .map(
+          (route) => LoungeRoute(
+            masterRouteId: route['routeId'] as String,
+            stopBeforeId: route['stopBeforeId'] as String,
+            stopAfterId: route['stopAfterId'] as String,
+          ),
+        )
+        .toList();
+
     final updatedLounge = _selectedLounge!.copyWith(
       loungeName: _loungeNameCtrl.text.trim(),
       address: _addressCtrl.text.trim(),
+      state: _nullableText(_stateCtrl),
+      postalCode: _nullableText(_postalCodeCtrl),
+      district: _selectedDistrictId,
       contactPhone: _contactPhoneCtrl.text.trim(),
       latitude: _latitudeCtrl.text.trim(),
       longitude: _longitudeCtrl.text.trim(),
@@ -216,6 +291,9 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
       price3Hours: _nullableText(_price3HourCtrl),
       priceUntilBus: _nullableText(_priceUntilBusCtrl),
       description: _nullableText(_descriptionCtrl),
+      amenities: _parseCommaSeparatedList(_amenitiesCtrl.text),
+      images: _parseLineSeparatedList(_imagesCtrl.text),
+      routes: parsedRoutes,
     );
 
     final success = await registrationProvider.updateLoungeDetails(
@@ -322,6 +400,12 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
             );
           }
 
+          if (_isLoadingLounge) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
           return SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -358,7 +442,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Modify your lounge details',
+                            'Current values are prefilled below. Edit only what needs changing.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
@@ -370,6 +454,11 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                     ),
 
                     const SizedBox(height: 32),
+
+                    if (_selectedLounge != null) ...[
+                      _buildCurrentValuesCard(_selectedLounge!),
+                      const SizedBox(height: 24),
+                    ],
 
                     if (widget.initialLounge == null) ...[
                       const Text(
@@ -509,6 +598,92 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                       const SizedBox(height: 16),
 
                       TextFormField(
+                        controller: _stateCtrl,
+                        decoration: _inputDecoration(
+                          'State / Province',
+                          Icons.map_outlined,
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _postalCodeCtrl,
+                        decoration: _inputDecoration(
+                          'Postal Code',
+                          Icons.markunread_mailbox_outlined,
+                        ),
+                        keyboardType: TextInputType.text,
+                      ),
+                      const SizedBox(height: 16),
+
+                      if (_isLoadingDistricts)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                          ),
+                          child: const Row(
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 12),
+                              Text('Loading districts...'),
+                            ],
+                          ),
+                        )
+                      else if (_districtsError != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.08),
+                            border:
+                                Border.all(color: Colors.red.withOpacity(0.3)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline,
+                                  color: Colors.red),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _districtsError!,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loadDistricts,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        DropdownButtonFormField<String>(
+                          value: _selectedDistrictId,
+                          decoration: _inputDecoration(
+                            'District',
+                            Icons.location_city_outlined,
+                          ),
+                          items: _districtDropdownItems(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedDistrictId = value;
+                            });
+                          },
+                        ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
                         controller: _contactPhoneCtrl,
                         decoration: _inputDecoration(
                           'Contact Phone',
@@ -574,6 +749,58 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                         ),
                         textCapitalization: TextCapitalization.sentences,
                         maxLines: 3,
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      const Text(
+                        'Amenities, Images & Routes',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _amenitiesCtrl,
+                        decoration: _inputDecoration(
+                          'Amenities (comma separated)',
+                          Icons.local_offer_outlined,
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Example: wifi, ac, charging_ports',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _imagesCtrl,
+                        decoration: _inputDecoration(
+                          'Image URLs (one per line)',
+                          Icons.image_outlined,
+                        ),
+                        maxLines: 4,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      _buildSelectedRoutesEditor(),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Use Add Route to select route and stops',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
 
                       const SizedBox(height: 24),
@@ -713,5 +940,488 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   String? _nullableText(TextEditingController controller) {
     final value = controller.text.trim();
     return value.isEmpty ? null : value;
+  }
+
+  Future<void> _loadDistricts() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingDistricts = true;
+      _districtsError = null;
+    });
+
+    try {
+      final districts = await _loungeOwnerRemoteDataSource.getAllDistricts();
+      if (!mounted) return;
+      setState(() {
+        _districts = districts;
+        _isLoadingDistricts = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _districts = [];
+        _districtsError = 'Failed to load districts';
+        _isLoadingDistricts = false;
+      });
+    }
+  }
+
+  List<DropdownMenuItem<String>> _districtDropdownItems() {
+    final items = _districts.map((district) {
+      final id = district['id'] as String? ?? '';
+      final name = district['district'] as String? ?? '';
+      return DropdownMenuItem<String>(
+        value: id,
+        child: Text(name),
+      );
+    }).toList();
+
+    final selectedId = _selectedDistrictId;
+    if (selectedId != null &&
+        selectedId.isNotEmpty &&
+        !_districts.any((d) => d['id'] == selectedId)) {
+      items.insert(
+        0,
+        DropdownMenuItem<String>(
+          value: selectedId,
+          child: Text('Unknown district ($selectedId)'),
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  String? _districtNameForId(String? districtId) {
+    if (districtId == null || districtId.isEmpty) return null;
+    final match = _districts.where((d) => d['id'] == districtId).toList();
+    if (match.isNotEmpty) {
+      return match.first['district'] as String?;
+    }
+    return districtId;
+  }
+
+  Widget _buildSelectedRoutesEditor() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedRoutes.isNotEmpty)
+          ..._selectedRoutes.asMap().entries.map((entry) {
+            final index = entry.key;
+            final route = entry.value;
+            final routeNumber = route['routeNumber'] as String? ?? 'Route';
+            final routeDisplay = route['routeDisplay'] as String? ?? '';
+            final stopBeforeName =
+                route['stopBeforeName'] as String? ?? route['stopBeforeId'];
+            final stopAfterName =
+                route['stopAfterName'] as String? ?? route['stopAfterId'];
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                title: Text('$routeNumber: $routeDisplay'),
+                subtitle: Text('Between: $stopBeforeName -> $stopAfterName'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    setState(() {
+                      _selectedRoutes.removeAt(index);
+                    });
+                  },
+                ),
+              ),
+            );
+          }),
+        ElevatedButton.icon(
+          onPressed: _showAddRouteDialog,
+          icon: const Icon(Icons.add),
+          label: const Text('Add Route'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showAddRouteDialog() async {
+    String? selectedRouteId;
+    String? selectedStopBeforeId;
+    String? selectedStopAfterId;
+    List<MasterRouteStop> routeStops = [];
+    bool loadingStops = false;
+    bool loadingInitialRoutes = true;
+    String searchQuery = '';
+    List<MasterRoute> dialogRoutes = [];
+    List<MasterRoute> allRoutes = [];
+
+    Future<void> loadInitialRoutes(StateSetter setDialogState) async {
+      try {
+        final apiClient = InjectionContainer().apiClient;
+        final routeDataSource = RouteRemoteDataSource(apiClient: apiClient);
+        final routes = await routeDataSource.getMasterRoutes();
+
+        allRoutes = routes;
+        dialogRoutes = routes.take(5).toList();
+
+        setDialogState(() {
+          loadingInitialRoutes = false;
+        });
+      } catch (e) {
+        setDialogState(() {
+          loadingInitialRoutes = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load routes: $e')),
+          );
+        }
+      }
+    }
+
+    void filterRoutes(String query, StateSetter setDialogState) {
+      if (query.isEmpty) {
+        setDialogState(() {
+          dialogRoutes = allRoutes.take(5).toList();
+        });
+      } else {
+        final filtered = allRoutes
+            .where((route) {
+              final q = query.toLowerCase();
+              return route.routeNumber.toLowerCase().contains(q) ||
+                  route.routeName.toLowerCase().contains(q) ||
+                  route.originCity.toLowerCase().contains(q) ||
+                  route.destinationCity.toLowerCase().contains(q);
+            })
+            .take(5)
+            .toList();
+
+        setDialogState(() {
+          dialogRoutes = filtered;
+        });
+      }
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          if (loadingInitialRoutes && allRoutes.isEmpty) {
+            loadInitialRoutes(setDialogState);
+          }
+
+          return AlertDialog(
+            title: const Text('Add Route'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Search Route',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: 'Type route number or city name...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  searchQuery = '';
+                                  filterRoutes('', setDialogState);
+                                },
+                              )
+                            : null,
+                      ),
+                      onChanged: (value) {
+                        searchQuery = value;
+                        filterRoutes(value, setDialogState);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    if (loadingInitialRoutes)
+                      const Center(child: CircularProgressIndicator()),
+                    if (!loadingInitialRoutes && dialogRoutes.isNotEmpty) ...[
+                      const Text(
+                        'Select Route',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedRouteId,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Choose a route',
+                        ),
+                        isExpanded: true,
+                        items: dialogRoutes.map((route) {
+                          return DropdownMenuItem(
+                            value: route.id,
+                            child: Text(
+                              '${route.routeNumber}: ${route.routeDisplay}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) async {
+                          setDialogState(() {
+                            selectedRouteId = value;
+                            selectedStopBeforeId = null;
+                            selectedStopAfterId = null;
+                            routeStops = [];
+                            loadingStops = true;
+                          });
+
+                          if (value != null) {
+                            try {
+                              final apiClient = InjectionContainer().apiClient;
+                              final routeDataSource = RouteRemoteDataSource(
+                                apiClient: apiClient,
+                              );
+                              final stops = await routeDataSource.getRouteStops(
+                                value,
+                              );
+                              setDialogState(() {
+                                routeStops = stops;
+                                loadingStops = false;
+                              });
+                            } catch (_) {
+                              setDialogState(() => loadingStops = false);
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                    if (loadingStops)
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    if (routeStops.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Stop Before Lounge',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedStopBeforeId,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Select stop before',
+                        ),
+                        isExpanded: true,
+                        items: routeStops.map((stop) {
+                          return DropdownMenuItem(
+                            value: stop.id,
+                            child: Text('${stop.stopOrder}. ${stop.stopName}'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedStopBeforeId = value;
+                            if (selectedStopAfterId != null) {
+                              final beforeIndex = routeStops.indexWhere(
+                                (s) => s.id == value,
+                              );
+                              final afterIndex = routeStops.indexWhere(
+                                (s) => s.id == selectedStopAfterId,
+                              );
+                              if (afterIndex <= beforeIndex) {
+                                selectedStopAfterId = null;
+                              }
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Stop After Lounge',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedStopAfterId,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Select stop after',
+                        ),
+                        isExpanded: true,
+                        items: routeStops.where((stop) {
+                          if (selectedStopBeforeId == null) return true;
+                          final beforeIndex = routeStops.indexWhere(
+                            (s) => s.id == selectedStopBeforeId,
+                          );
+                          final currentIndex = routeStops.indexWhere(
+                            (s) => s.id == stop.id,
+                          );
+                          return currentIndex > beforeIndex;
+                        }).map((stop) {
+                          return DropdownMenuItem(
+                            value: stop.id,
+                            child: Text('${stop.stopOrder}. ${stop.stopName}'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() => selectedStopAfterId = value);
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: (selectedRouteId != null &&
+                        selectedStopBeforeId != null &&
+                        selectedStopAfterId != null)
+                    ? () {
+                        final selectedRoute = dialogRoutes.firstWhere(
+                          (r) => r.id == selectedRouteId,
+                          orElse: () => allRoutes.firstWhere(
+                            (r) => r.id == selectedRouteId,
+                          ),
+                        );
+                        final stopBefore = routeStops.firstWhere(
+                          (s) => s.id == selectedStopBeforeId,
+                        );
+                        final stopAfter = routeStops.firstWhere(
+                          (s) => s.id == selectedStopAfterId,
+                        );
+
+                        setState(() {
+                          _selectedRoutes.add({
+                            'routeId': selectedRouteId!,
+                            'stopBeforeId': selectedStopBeforeId!,
+                            'stopAfterId': selectedStopAfterId!,
+                            'routeNumber': selectedRoute.routeNumber,
+                            'routeDisplay': selectedRoute.routeDisplay,
+                            'stopBeforeName': stopBefore.stopName,
+                            'stopAfterName': stopAfter.stopName,
+                          });
+                        });
+                        Navigator.pop(context);
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCurrentValuesCard(Lounge lounge) {
+    final routes = lounge.routes ?? const [];
+    final amenities = lounge.amenities ?? const [];
+    final images = lounge.images ?? const [];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Current Saved Values',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _summaryRow('Lounge Name', lounge.loungeName),
+          _summaryRow('Description', lounge.description),
+          _summaryRow('Address', lounge.address),
+          _summaryRow('District', _districtNameForId(lounge.district)),
+          _summaryRow('State / Province', lounge.state),
+          _summaryRow('Postal Code', lounge.postalCode),
+          _summaryRow('Contact', lounge.contactPhone),
+          _summaryRow('Max Capacity', lounge.capacity?.toString()),
+          _summaryRow(
+            'Location',
+            '${lounge.latitude ?? 'Not provided'}, ${lounge.longitude ?? 'Not provided'}',
+          ),
+          _summaryRow('Price 1 Hour', lounge.price1Hour),
+          _summaryRow('Price 2 Hours', lounge.price2Hours),
+          _summaryRow('Price 3 Hours', lounge.price3Hours),
+          _summaryRow('Price Until Bus', lounge.priceUntilBus),
+          _summaryRow('Route Count', routes.length.toString()),
+          _summaryRow('Amenities Count', amenities.length.toString()),
+          _summaryRow('Image Count', images.length.toString()),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              (value == null || value.trim().isEmpty) ? 'Not provided' : value,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _parseCommaSeparatedList(String value) {
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  List<String> _parseLineSeparatedList(String value) {
+    return value
+        .split('\n')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 }
