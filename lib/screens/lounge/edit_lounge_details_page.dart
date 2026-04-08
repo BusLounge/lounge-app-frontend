@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
 import '../../core/di/injection_container.dart';
 import '../../data/datasources/lounge_owner_remote_datasource.dart';
 import '../../data/datasources/route_remote_datasource.dart';
-import '../../data/models/route_model.dart';
-import '../../domain/entities/lounge_route.dart';
-import '../../presentation/providers/registration_provider.dart';
 import '../../domain/entities/lounge.dart';
+import '../../domain/entities/lounge_route.dart';
+import '../../data/models/route_model.dart';
+import '../../presentation/providers/registration_provider.dart';
+import '../../data/datasources/supabase_storage_service.dart';
 
 class EditLoungeDetailsPage extends StatefulWidget {
   final Lounge? initialLounge;
@@ -37,22 +41,25 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   final _descriptionCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
   final _postalCodeCtrl = TextEditingController();
-  final _amenitiesCtrl = TextEditingController();
-  final _imagesCtrl = TextEditingController();
 
   late LoungeOwnerRemoteDataSource _loungeOwnerRemoteDataSource;
+  late SupabaseStorageService _supabaseStorageService;
   List<Map<String, dynamic>> _districts = [];
   String? _selectedDistrictId;
   bool _isLoadingDistricts = false;
   String? _districtsError;
 
   final List<Map<String, dynamic>> _selectedRoutes = [];
+  final List<String> _selectedAmenities = [];
+  final List<String> _existingImageUrls = [];
+  final List<File> _newImageFiles = [];
 
   @override
   void initState() {
     super.initState();
     _loungeOwnerRemoteDataSource =
         InjectionContainer().loungeOwnerRemoteDataSource;
+    _supabaseStorageService = InjectionContainer().supabaseStorageService;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadDistricts();
 
@@ -92,8 +99,6 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _descriptionCtrl.dispose();
     _stateCtrl.dispose();
     _postalCodeCtrl.dispose();
-    _amenitiesCtrl.dispose();
-    _imagesCtrl.dispose();
     super.dispose();
   }
 
@@ -194,8 +199,13 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _stateCtrl.text = lounge.state ?? '';
     _postalCodeCtrl.text = lounge.postalCode ?? '';
     _selectedDistrictId = lounge.district;
-    _amenitiesCtrl.text = (lounge.amenities ?? const []).join(', ');
-    _imagesCtrl.text = (lounge.images ?? const []).join('\n');
+    _selectedAmenities
+      ..clear()
+      ..addAll(lounge.amenities ?? const []);
+    _existingImageUrls
+      ..clear()
+      ..addAll(lounge.images ?? const []);
+    _newImageFiles.clear();
 
     _selectedRoutes
       ..clear()
@@ -276,6 +286,33 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
         )
         .toList();
 
+    List<String> finalImageUrls = List<String>.from(_existingImageUrls);
+    if (_newImageFiles.isNotEmpty) {
+      final loungeId = _selectedLounge!.id.isNotEmpty
+          ? _selectedLounge!.id
+          : DateTime.now().millisecondsSinceEpoch.toString();
+      final uploadedUrls =
+          await _supabaseStorageService.uploadMultipleLoungePhotos(
+        imageFiles: _newImageFiles,
+        loungeId: loungeId,
+      );
+      finalImageUrls.addAll(uploadedUrls);
+    }
+
+    if (finalImageUrls.isEmpty) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please keep at least one image or upload a new one'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final updatedLounge = _selectedLounge!.copyWith(
       loungeName: _loungeNameCtrl.text.trim(),
       address: _addressCtrl.text.trim(),
@@ -291,8 +328,8 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
       price3Hours: _nullableText(_price3HourCtrl),
       priceUntilBus: _nullableText(_priceUntilBusCtrl),
       description: _nullableText(_descriptionCtrl),
-      amenities: _parseCommaSeparatedList(_amenitiesCtrl.text),
-      images: _parseLineSeparatedList(_imagesCtrl.text),
+      amenities: List<String>.from(_selectedAmenities),
+      images: finalImageUrls,
       routes: parsedRoutes,
     );
 
@@ -763,33 +800,11 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      TextFormField(
-                        controller: _amenitiesCtrl,
-                        decoration: _inputDecoration(
-                          'Amenities (comma separated)',
-                          Icons.local_offer_outlined,
-                        ),
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Example: wifi, ac, charging_ports',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
+                      _buildAmenitiesSelector(),
 
                       const SizedBox(height: 16),
 
-                      TextFormField(
-                        controller: _imagesCtrl,
-                        decoration: _inputDecoration(
-                          'Image URLs (one per line)',
-                          Icons.image_outlined,
-                        ),
-                        maxLines: 4,
-                      ),
+                      _buildImagesSection(),
 
                       const SizedBox(height: 16),
 
@@ -1409,19 +1424,206 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     );
   }
 
-  List<String> _parseCommaSeparatedList(String value) {
-    return value
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList();
+  Widget _buildAmenitiesSelector() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color:
+              _selectedAmenities.isEmpty ? Colors.orange : Colors.grey.shade300,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+      ),
+      child: Column(
+        children: LoungeAmenities.allCodes.map((code) {
+          return CheckboxListTile(
+            value: _selectedAmenities.contains(code),
+            onChanged: (checked) {
+              setState(() {
+                if (checked == true) {
+                  _selectedAmenities.add(code);
+                } else {
+                  _selectedAmenities.remove(code);
+                }
+              });
+            },
+            title: Text(LoungeAmenities.labels[code] ?? code),
+            secondary: Icon(
+              LoungeAmenities.icons[code] ?? Icons.check_circle_outline,
+              color: _selectedAmenities.contains(code)
+                  ? AppColors.primary
+                  : Colors.grey,
+            ),
+            dense: true,
+          );
+        }).toList(),
+      ),
+    );
   }
 
-  List<String> _parseLineSeparatedList(String value) {
-    return value
-        .split('\n')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList();
+  Widget _buildImagesSection() {
+    final allImageSources = [
+      ..._existingImageUrls.map((url) => _ImageSource.network(url)),
+      ..._newImageFiles.map((file) => _ImageSource.file(file)),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Lounge Images',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _pickNewImages,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('Add Image'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Current images are shown as previews. Add new ones from your device.',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 12),
+        if (allImageSources.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Text(
+              'No images available yet.',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: allImageSources.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemBuilder: (context, index) {
+              final source = allImageSources[index];
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: source.isNetwork
+                        ? Image.network(
+                            source.value,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(Icons.broken_image_outlined),
+                            ),
+                          )
+                        : Image.file(
+                            source.file!,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (source.isNetwork) {
+                            _existingImageUrls.remove(source.value);
+                          } else {
+                            _newImageFiles.removeWhere(
+                                (file) => file.path == source.file!.path);
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+      ],
+    );
   }
+
+  Future<void> _pickNewImages() async {
+    final picker = ImagePicker();
+
+    try {
+      final images = await picker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (images.isEmpty) return;
+
+      setState(() {
+        for (final image in images) {
+          if (_existingImageUrls.length + _newImageFiles.length >= 5) {
+            break;
+          }
+          _newImageFiles.add(File(image.path));
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image(s) added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick images: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _ImageSource {
+  final String value;
+  final File? file;
+
+  const _ImageSource.network(this.value) : file = null;
+  const _ImageSource.file(this.file) : value = '';
+
+  bool get isNetwork => file == null;
 }
