@@ -151,10 +151,12 @@ class LoungeOwnerProvider with ChangeNotifier {
   }
 
   /// Get lounge owner profile
-  Future<bool> getLoungeOwnerProfile() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<bool> getLoungeOwnerProfile({bool showLoading = true}) async {
+    if (showLoading) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     print('🔍 PROVIDER - Calling getProfileUseCase...');
     final result = await getProfileUseCase();
@@ -162,7 +164,9 @@ class LoungeOwnerProvider with ChangeNotifier {
     return result.fold(
       (failure) {
         print('❌ PROVIDER - Got failure: ${failure.message}');
-        _isLoading = false;
+        if (showLoading) {
+          _isLoading = false;
+        }
         _errorMessage = failure.message;
         notifyListeners();
         return false;
@@ -170,7 +174,9 @@ class LoungeOwnerProvider with ChangeNotifier {
       (profile) {
         print(
             '🔍 PROVIDER - Got success! Profile type: ${profile.runtimeType}');
-        _isLoading = false;
+        if (showLoading) {
+          _isLoading = false;
+        }
         _profile = profile;
 
         // 🔍 DEBUG: Log what gets stored in provider

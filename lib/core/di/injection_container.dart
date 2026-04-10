@@ -394,6 +394,7 @@ class InjectionContainer {
   StaffRepository get staffRepository => _staffRepository;
   LoungeOwnerRepository get loungeOwnerRepository => _loungeOwnerRepository;
   LoungeRepository get loungeRepository => _loungeRepository;
+  AuthLocalDataSource get authLocalDataSource => _authLocalDataSource;
 
   ApiClient get apiClient => _apiClient;
   SupabaseStorageService get supabaseStorageService => _supabaseStorageService;

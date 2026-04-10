@@ -412,11 +412,15 @@ class RegistrationProvider with ChangeNotifier {
   }
 
   /// Load my lounges
-  Future<void> loadMyLounges() async {
+  Future<void> loadMyLounges({bool showLoading = true}) async {
     print('📍 Provider - loadMyLounges called');
-    _isLoading = true;
+    if (showLoading) {
+      _isLoading = true;
+    }
     _errorMessage = null;
-    notifyListeners();
+    if (showLoading) {
+      notifyListeners();
+    }
 
     final result = await getMyLoungesUseCase();
 
@@ -424,7 +428,9 @@ class RegistrationProvider with ChangeNotifier {
       (failure) {
         print('❌ Provider - loadMyLounges failed: ${failure.message}');
         print('⚠️ Clearing cached lounges to avoid showing stale data');
-        _isLoading = false;
+        if (showLoading) {
+          _isLoading = false;
+        }
         _errorMessage = failure.message;
         _myLounges = [];
         _activeLoungeId = null;
@@ -435,7 +441,9 @@ class RegistrationProvider with ChangeNotifier {
         for (var lounge in lounges) {
           print('   - ${lounge.loungeName} (${lounge.status})');
         }
-        _isLoading = false;
+        if (showLoading) {
+          _isLoading = false;
+        }
         _myLounges = lounges;
         final verified = verifiedLounges;
         if (verified.isEmpty) {

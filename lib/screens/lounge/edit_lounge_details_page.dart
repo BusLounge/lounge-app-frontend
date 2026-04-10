@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -459,8 +460,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
           color: hasLocation ? Colors.grey.shade300 : Colors.red,
           width: hasLocation ? 1 : 2,
         ),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
         leading: const Icon(Icons.map, color: AppColors.primary),
@@ -498,44 +498,636 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     );
   }
 
+  int get _totalImagesCount =>
+      _existingImageUrls.length + _newImageFiles.length;
+
+  Widget _buildLoungeSelectorCard(
+    RegistrationProvider registrationProvider,
+  ) {
+    if (widget.initialLounge != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.store, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _selectedLounge?.loungeName ?? widget.initialLounge!.loungeName,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final lounges = registrationProvider.myLounges;
+    final matchingSelectedLounges = _selectedLounge == null
+        ? <Lounge>[]
+        : lounges.where((item) => item.id == _selectedLounge!.id).toList();
+    final dropdownSelectedLounge = matchingSelectedLounges.isNotEmpty
+        ? matchingSelectedLounges.first
+        : null;
+
+    return DropdownButtonFormField<Lounge>(
+      value: dropdownSelectedLounge,
+      decoration: InputDecoration(
+        labelText: 'Select Lounge *',
+        hintText: 'Choose a lounge to edit',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        prefixIcon: const Icon(Icons.store),
+      ),
+      items: lounges.map((lounge) {
+        return DropdownMenuItem<Lounge>(
+          value: lounge,
+          child: Text(lounge.loungeName),
+        );
+      }).toList(),
+      onChanged: (lounge) {
+        if (lounge != null) {
+          _loadSelectedLounge(lounge);
+        }
+      },
+      validator: (v) => v == null ? 'Please select a lounge' : null,
+    );
+  }
+
+  Widget _buildPhotoSection() {
+    final allImageSources = [
+      ..._existingImageUrls.map((url) => _ImageSource.network(url)),
+      ..._newImageFiles.map((file) => _ImageSource.file(file)),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCameraCard(
+          title: 'Add Lounge Photos ($_totalImagesCount/5)',
+          icon: Icons.photo_camera,
+          onTap: _totalImagesCount < 5 ? _pickNewImages : null,
+        ),
+        const SizedBox(height: 16),
+        if (allImageSources.isNotEmpty)
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: allImageSources.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemBuilder: (context, index) {
+              final source = allImageSources[index];
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: source.isNetwork
+                        ? Image.network(
+                            source.value,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(Icons.broken_image_outlined),
+                            ),
+                          )
+                        : Image.file(source.file!, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (source.isNetwork) {
+                            _existingImageUrls.remove(source.value);
+                          } else {
+                            _newImageFiles.removeWhere(
+                              (file) => file.path == source.file!.path,
+                            );
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBasicInfoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _loungeNameCtrl,
+          decoration: InputDecoration(
+            labelText: 'Lounge Name *',
+            hintText: 'Enter lounge name',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.store),
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Lounge name is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _descriptionCtrl,
+          decoration: InputDecoration(
+            labelText: 'Description',
+            hintText: 'Brief description of your lounge',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.description),
+          ),
+          maxLines: 3,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _addressCtrl,
+          decoration: InputDecoration(
+            labelText: 'Address *',
+            hintText: 'Enter complete address',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.location_on),
+          ),
+          maxLines: 2,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Address is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        if (_isLoadingDistricts)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Loading districts...'),
+              ],
+            ),
+          )
+        else if (_districtsError != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.08),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _districtsError!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+                TextButton(
+                    onPressed: _loadDistricts, child: const Text('Retry')),
+              ],
+            ),
+          )
+        else
+          DropdownButtonFormField<String>(
+            value: _selectedDistrictId,
+            decoration: InputDecoration(
+              labelText: 'District *',
+              hintText: 'Select lounge district',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              prefixIcon: const Icon(Icons.map_outlined),
+            ),
+            items: _districtDropdownItems(),
+            onChanged: (value) {
+              setState(() {
+                _selectedDistrictId = value;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select a district';
+              }
+              return null;
+            },
+          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _stateCtrl,
+                decoration: InputDecoration(
+                  labelText: 'State/Province',
+                  hintText: 'e.g., Western',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: _postalCodeCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Postal Code',
+                  hintText: 'e.g., 10100',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _contactPhoneCtrl,
+          decoration: InputDecoration(
+            labelText: 'Contact Phone *',
+            hintText: '+94771234567',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.phone),
+          ),
+          keyboardType: TextInputType.phone,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Contact phone is required';
+            }
+            final phonePattern = RegExp(r'^\+?\d{10,15}$');
+            if (!phonePattern.hasMatch(value.trim().replaceAll(' ', ''))) {
+              return 'Invalid phone number (10-15 digits)';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _capacityCtrl,
+          decoration: InputDecoration(
+            labelText: 'Maximum Capacity *',
+            hintText: 'e.g., 50',
+            helperText: 'Maximum number of people',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.people),
+          ),
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Capacity is required';
+            }
+            final capacity = int.tryParse(value);
+            if (capacity == null || capacity <= 0) {
+              return 'Capacity must be greater than 0';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPricingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pricing (LKR)',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Set your lounge pricing tiers',
+          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _price1HourCtrl,
+          decoration: InputDecoration(
+            labelText: '1 Hour Price *',
+            hintText: '500.00',
+            prefixText: 'LKR ',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.attach_money),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '1 hour price is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _price2HourCtrl,
+          decoration: InputDecoration(
+            labelText: '2 Hours Price *',
+            hintText: '900.00',
+            prefixText: 'LKR ',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.attach_money),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '2 hours price is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _price3HourCtrl,
+          decoration: InputDecoration(
+            labelText: '3 Hours Price *',
+            hintText: '1200.00',
+            prefixText: 'LKR ',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.attach_money),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '3 hours price is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _priceUntilBusCtrl,
+          decoration: InputDecoration(
+            labelText: 'Price Until Bus Arrives *',
+            hintText: '1500.00',
+            prefixText: 'LKR ',
+            helperText: 'Flexible pricing for bus arrival wait',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.attach_money),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Until bus price is required';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoutesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Routes Served',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Add at least one route that your lounge serves.',
+          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 12),
+        _buildSelectedRoutesEditor(),
+      ],
+    );
+  }
+
+  Widget _buildAmenitiesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Amenities & Facilities',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Select available amenities (at least 1 required)',
+          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: _selectedAmenities.isEmpty
+                  ? Colors.orange
+                  : Colors.grey.shade300,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: LoungeAmenities.allCodes.map((code) {
+              return CheckboxListTile(
+                value: _selectedAmenities.contains(code),
+                onChanged: (checked) {
+                  setState(() {
+                    if (checked == true) {
+                      _selectedAmenities.add(code);
+                    } else {
+                      _selectedAmenities.remove(code);
+                    }
+                  });
+                },
+                title: Text(LoungeAmenities.labels[code] ?? code),
+                secondary: Icon(
+                  LoungeAmenities.icons[code] ?? Icons.check_circle_outline,
+                  color: _selectedAmenities.contains(code)
+                      ? AppColors.primary
+                      : Colors.grey,
+                ),
+                dense: true,
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildValidationMessages() {
+    return Column(
+      children: [
+        if (_totalImagesCount == 0)
+          _buildWarningBox(
+            icon: Icons.info,
+            color: Colors.orange,
+            message:
+                'Please add at least 1 photo of your lounge (maximum 5 photos)',
+          ),
+        if (_selectedAmenities.isEmpty)
+          _buildWarningBox(
+            icon: Icons.warning,
+            color: Colors.orange,
+            message: 'Please select at least one amenity',
+          ),
+        if (_initialMapLocationFromControllers() == null)
+          _buildWarningBox(
+            icon: Icons.error,
+            color: Colors.red,
+            message: 'Please select your lounge location on the map',
+          ),
+        if (_selectedRoutes.isEmpty)
+          _buildWarningBox(
+            icon: Icons.warning,
+            color: Colors.orange,
+            message: 'Please add at least one route',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWarningBox({
+    required IconData icon,
+    required Color color,
+    required String message,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(fontSize: 13, color: color.withOpacity(0.9)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraCard({
+    required String title,
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          color: onTap == null ? Colors.grey.shade100 : Colors.white,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 30),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to add photos',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.camera_alt, color: Colors.grey[400], size: 28),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const Color pageBg = Color(0xFFFFFBF5);
-
     return Scaffold(
-      backgroundColor: pageBg,
       appBar: AppBar(
-        backgroundColor: pageBg,
-        elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: Colors.black87,
-          ),
-        ),
-        title: const Text(
-          'Edit Lounge Details',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-        centerTitle: true,
+        title: const Text('Edit Lounge'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
       ),
       body: Consumer<RegistrationProvider>(
         builder: (context, registrationProvider, child) {
           final lounges = registrationProvider.myLounges;
-          final matchingSelectedLounges = _selectedLounge == null
-              ? <Lounge>[]
-              : lounges
-                  .where((item) => item.id == _selectedLounge!.id)
-                  .toList();
-          final dropdownSelectedLounge = matchingSelectedLounges.isNotEmpty
-              ? matchingSelectedLounges.first
-              : null;
 
           if (lounges.isEmpty) {
             return Center(
@@ -573,481 +1165,92 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
           }
 
           return SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header Section
-                    Center(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Form(
+                      key: _formKey,
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.edit_location_alt,
-                              size: 48,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
                           const Text(
-                            'Update Lounge Information',
+                            'Lounge Details',
                             style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black87,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Current values are prefilled below. Edit only what needs changing.',
-                            textAlign: TextAlign.center,
+                            'Edit your lounge details. Current values are prefilled.',
                             style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
-                            ),
+                                fontSize: 14, color: Colors.grey[600]),
                           ),
+                          const SizedBox(height: 24),
+                          _buildLoungeSelectorCard(registrationProvider),
+                          const SizedBox(height: 20),
+                          _buildPhotoSection(),
+                          const SizedBox(height: 20),
+                          _buildBasicInfoSection(),
+                          const SizedBox(height: 24),
+                          _buildMapLocationSelector(),
+                          const SizedBox(height: 24),
+                          _buildPricingSection(),
+                          const SizedBox(height: 24),
+                          _buildRoutesSection(),
+                          const SizedBox(height: 24),
+                          _buildAmenitiesSection(),
+                          const SizedBox(height: 24),
+                          _buildValidationMessages(),
                         ],
                       ),
                     ),
-
-                    const SizedBox(height: 32),
-
-                    if (_selectedLounge != null) ...[
-                      _buildCurrentValuesCard(_selectedLounge!),
-                      const SizedBox(height: 24),
-                    ],
-
-                    if (widget.initialLounge == null) ...[
-                      const Text(
-                        'Select Lounge',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: DropdownButtonFormField<Lounge>(
-                          value: dropdownSelectedLounge,
-                          items: lounges.map((lounge) {
-                            return DropdownMenuItem<Lounge>(
-                              value: lounge,
-                              child: Text(
-                                lounge.loungeName,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          decoration: InputDecoration(
-                            hintText: 'Choose a lounge to edit',
-                            hintStyle: TextStyle(color: Colors.grey.shade500),
-                            prefixIcon: const Icon(
-                              Icons.business,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 16,
-                            ),
-                            isDense: true,
-                          ),
-                          icon: Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: Icon(
-                              Icons.keyboard_arrow_down,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          dropdownColor: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          onChanged: (lounge) {
-                            if (lounge != null) {
-                              _loadSelectedLounge(lounge);
-                            }
-                          },
-                          validator: (v) =>
-                              v == null ? 'Please select a lounge' : null,
-                        ),
-                      ),
-                    ] else ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.business,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _selectedLounge?.loungeName ??
-                                    widget.initialLounge!.loungeName,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    if (_selectedLounge != null) ...[
-                      const SizedBox(height: 32),
-
-                      // Basic Information
-                      const Text(
-                        'Basic Information',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _loungeNameCtrl,
-                        decoration: _inputDecoration(
-                          'Lounge Name',
-                          Icons.store_outlined,
-                        ),
-                        textCapitalization: TextCapitalization.words,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Please enter lounge name'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _addressCtrl,
-                        decoration: _inputDecoration(
-                          'Address',
-                          Icons.location_on_outlined,
-                        ),
-                        textCapitalization: TextCapitalization.words,
-                        maxLines: 2,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Please enter address'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _stateCtrl,
-                        decoration: _inputDecoration(
-                          'State / Province',
-                          Icons.map_outlined,
-                        ),
-                        textCapitalization: TextCapitalization.words,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _postalCodeCtrl,
-                        decoration: _inputDecoration(
-                          'Postal Code',
-                          Icons.markunread_mailbox_outlined,
-                        ),
-                        keyboardType: TextInputType.text,
-                      ),
-                      const SizedBox(height: 16),
-
-                      if (_isLoadingDistricts)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(12),
-                            color: Colors.white,
-                          ),
-                          child: const Row(
-                            children: [
-                              SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                              SizedBox(width: 12),
-                              Text('Loading districts...'),
-                            ],
-                          ),
-                        )
-                      else if (_districtsError != null)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.08),
-                            border:
-                                Border.all(color: Colors.red.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline,
-                                  color: Colors.red),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _districtsError!,
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _loadDistricts,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        DropdownButtonFormField<String>(
-                          value: _selectedDistrictId,
-                          decoration: _inputDecoration(
-                            'District',
-                            Icons.location_city_outlined,
-                          ),
-                          items: _districtDropdownItems(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedDistrictId = value;
-                            });
-                          },
-                        ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _contactPhoneCtrl,
-                        decoration: _inputDecoration(
-                          'Contact Phone',
-                          Icons.phone_outlined,
-                        ),
-                        keyboardType: TextInputType.phone,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Please enter contact phone'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildMapLocationSelector(),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _capacityCtrl,
-                        decoration: _inputDecoration(
-                          'Capacity (People)',
-                          Icons.people_outline,
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Please enter capacity'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _descriptionCtrl,
-                        decoration: _inputDecoration(
-                          'Description',
-                          Icons.description_outlined,
-                        ),
-                        textCapitalization: TextCapitalization.sentences,
-                        maxLines: 3,
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      const Text(
-                        'Amenities, Images & Routes',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildAmenitiesSelector(),
-
-                      const SizedBox(height: 16),
-
-                      _buildImagesSection(),
-
-                      const SizedBox(height: 16),
-
-                      _buildSelectedRoutesEditor(),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Use Add Route to select route and stops',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Pricing Information
-                      const Text(
-                        'Pricing (LKR)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _price1HourCtrl,
-                        decoration: _inputDecoration(
-                          '1 Hour Price',
-                          Icons.access_time,
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Please enter price'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _price2HourCtrl,
-                        decoration: _inputDecoration(
-                          '2 Hour Price',
-                          Icons.more_time,
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _price3HourCtrl,
-                        decoration: _inputDecoration(
-                          '3 Hour Price',
-                          Icons.schedule,
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _priceUntilBusCtrl,
-                        decoration: _inputDecoration(
-                          'Until Bus Price',
-                          Icons.directions_bus,
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Save Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isSaving ? null : _saveChanges,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                            shadowColor: AppColors.primary.withOpacity(0.3),
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'Save Changes',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-                  ],
+                  ),
                 ),
-              ),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: const Offset(0, -3),
+                      ),
+                    ],
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _saveChanges,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Save Changes',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         },
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-      prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade200),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade200),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.red.shade300),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.red, width: 2),
       ),
     );
   }
@@ -1122,15 +1325,6 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     }
 
     return items;
-  }
-
-  String? _districtNameForId(String? districtId) {
-    if (districtId == null || districtId.isEmpty) return null;
-    final match = _districts.where((d) => d['id'] == districtId).toList();
-    if (match.isNotEmpty) {
-      return match.first['district'] as String?;
-    }
-    return districtId;
   }
 
   MasterRoute? _masterRouteForId(String? routeId) {
@@ -1497,238 +1691,6 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildCurrentValuesCard(Lounge lounge) {
-    final routes = lounge.routes ?? const [];
-    final amenities = lounge.amenities ?? const [];
-    final images = lounge.images ?? const [];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Current Saved Values',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _summaryRow('Lounge Name', lounge.loungeName),
-          _summaryRow('Description', lounge.description),
-          _summaryRow('Address', lounge.address),
-          _summaryRow('District', _districtNameForId(lounge.district)),
-          _summaryRow('State / Province', lounge.state),
-          _summaryRow('Postal Code', lounge.postalCode),
-          _summaryRow('Contact', lounge.contactPhone),
-          _summaryRow('Max Capacity', lounge.capacity?.toString()),
-          _summaryRow(
-            'Location',
-            '${lounge.latitude ?? 'Not provided'}, ${lounge.longitude ?? 'Not provided'}',
-          ),
-          _summaryRow('Price 1 Hour', lounge.price1Hour),
-          _summaryRow('Price 2 Hours', lounge.price2Hours),
-          _summaryRow('Price 3 Hours', lounge.price3Hours),
-          _summaryRow('Price Until Bus', lounge.priceUntilBus),
-          _summaryRow('Route Count', routes.length.toString()),
-          _summaryRow('Amenities Count', amenities.length.toString()),
-          _summaryRow('Image Count', images.length.toString()),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryRow(String label, String? value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              (value == null || value.trim().isEmpty) ? 'Not provided' : value,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAmenitiesSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color:
-              _selectedAmenities.isEmpty ? Colors.orange : Colors.grey.shade300,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
-      ),
-      child: Column(
-        children: LoungeAmenities.allCodes.map((code) {
-          return CheckboxListTile(
-            value: _selectedAmenities.contains(code),
-            onChanged: (checked) {
-              setState(() {
-                if (checked == true) {
-                  _selectedAmenities.add(code);
-                } else {
-                  _selectedAmenities.remove(code);
-                }
-              });
-            },
-            title: Text(LoungeAmenities.labels[code] ?? code),
-            secondary: Icon(
-              LoungeAmenities.icons[code] ?? Icons.check_circle_outline,
-              color: _selectedAmenities.contains(code)
-                  ? AppColors.primary
-                  : Colors.grey,
-            ),
-            dense: true,
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildImagesSection() {
-    final allImageSources = [
-      ..._existingImageUrls.map((url) => _ImageSource.network(url)),
-      ..._newImageFiles.map((file) => _ImageSource.file(file)),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Lounge Images',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _pickNewImages,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('Add Image'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Current images are shown as previews. Add new ones from your device.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 12),
-        if (allImageSources.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Text(
-              'No images available yet.',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          )
-        else
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: allImageSources.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemBuilder: (context, index) {
-              final source = allImageSources[index];
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: source.isNetwork
-                        ? Image.network(
-                            source.value,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.broken_image_outlined),
-                            ),
-                          )
-                        : Image.file(
-                            source.file!,
-                            fit: BoxFit.cover,
-                          ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (source.isNetwork) {
-                            _existingImageUrls.remove(source.value);
-                          } else {
-                            _newImageFiles.removeWhere(
-                                (file) => file.path == source.file!.path);
-                          }
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-      ],
     );
   }
 

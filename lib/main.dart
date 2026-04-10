@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Dependency Injection
+import 'core/config/app_config.dart';
 import 'core/di/injection_container.dart';
+import 'core/realtime/realtime_event.dart';
+import 'core/realtime/realtime_socket_service.dart';
 
 // Providers
 import 'presentation/providers/auth_provider.dart';
@@ -50,38 +55,167 @@ void main() async {
   runApp(MyApp(di: di));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final InjectionContainer di;
 
   const MyApp({super.key, required this.di});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final RealtimeSocketService _realtimeSocketService;
+  StreamSubscription<RealtimeEvent>? _realtimeSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _realtimeSocketService = RealtimeSocketService(
+      baseUrl: AppConfig.webSocketUrl,
+      accessTokenProvider: () async {
+        final tokens = await widget.di.authLocalDataSource.getTokens();
+        return tokens?.accessToken;
+      },
+    );
+
+    _realtimeSubscription = _realtimeSocketService.events.listen((event) {
+      unawaited(_handleRealtimeEvent(event));
+    });
+
+    widget.di.authProvider.addListener(_handleAuthStateChanged);
+    unawaited(_syncRealtimeConnection());
+  }
+
+  @override
+  void dispose() {
+    widget.di.authProvider.removeListener(_handleAuthStateChanged);
+    _realtimeSubscription?.cancel();
+    unawaited(_realtimeSocketService.dispose());
+    super.dispose();
+  }
+
+  void _handleAuthStateChanged() {
+    unawaited(_syncRealtimeConnection());
+  }
+
+  Future<void> _syncRealtimeConnection() async {
+    final authProvider = widget.di.authProvider;
+    final user = authProvider.user;
+
+    if (!authProvider.isAuthenticated || user == null) {
+      await _realtimeSocketService.disconnect();
+      return;
+    }
+
+    await _realtimeSocketService.connect(userId: user.id, roles: user.roles);
+  }
+
+  Future<void> _handleRealtimeEvent(RealtimeEvent event) async {
+    final registrationProvider = widget.di.registrationProvider;
+
+    final isApprovalEvent = event.containsAny([
+      'approval',
+      'verification_status',
+      'profile_approval',
+      'owner.approved',
+      'staff.approved',
+    ]);
+
+    final isStaffEvent = event.containsAny([
+      'staff',
+      'employee',
+      'lounge_staff',
+    ]);
+
+    final isLocationEvent = event.containsAny([
+      'location',
+      'transport_location',
+      'destination',
+    ]);
+
+    final isLoungeEvent = event.containsAny([
+      'lounge',
+      'profile',
+      'registration',
+    ]);
+
+    if (isApprovalEvent || isLoungeEvent) {
+      unawaited(
+        widget.di.loungeOwnerProvider.getLoungeOwnerProfile(showLoading: false),
+      );
+      unawaited(widget.di.registrationProvider.loadMyLounges(showLoading: false));
+    }
+
+    if (isStaffEvent) {
+      final loungeId = event.firstStringByKeys([
+            'lounge_id',
+            'loungeId',
+            'owner_lounge_id',
+          ]) ??
+          registrationProvider.activeLoungeId ??
+          registrationProvider.preferredVerifiedLoungeId;
+
+      if (loungeId != null) {
+        unawaited(
+          widget.di.loungeStaffProvider
+              .refreshForLounge(loungeId, showLoading: false),
+        );
+      } else {
+        unawaited(widget.di.loungeStaffProvider.refreshLastQuery());
+      }
+
+      unawaited(widget.di.loungeStaffProvider.getMyStaffProfile(showLoading: false));
+    }
+
+    if (isLocationEvent) {
+      final loungeId = event.firstStringByKeys([
+            'lounge_id',
+            'loungeId',
+            'owner_lounge_id',
+          ]) ??
+          registrationProvider.activeLoungeId ??
+          registrationProvider.preferredVerifiedLoungeId;
+
+      if (loungeId != null) {
+        unawaited(widget.di.transportLocationProvider.loadTransportLocations(
+          loungeId,
+          showLoading: false,
+        ));
+      } else {
+        unawaited(widget.di.transportLocationProvider.refreshLastLounge());
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         // Provide the refactored providers with proper DI
-        ChangeNotifierProvider<AuthProvider>.value(value: di.authProvider),
+        ChangeNotifierProvider<AuthProvider>.value(value: widget.di.authProvider),
         ChangeNotifierProvider<LoungeOwnerProvider>.value(
-          value: di.loungeOwnerProvider,
+          value: widget.di.loungeOwnerProvider,
         ),
         ChangeNotifierProvider<RegistrationProvider>.value(
-          value: di.registrationProvider,
+          value: widget.di.registrationProvider,
         ),
         ChangeNotifierProvider<MarketplaceProvider>.value(
-          value: di.marketplaceProvider,
+          value: widget.di.marketplaceProvider,
         ),
-        ChangeNotifierProvider.value(value: di.roleSelectionProvider),
+        ChangeNotifierProvider.value(value: widget.di.roleSelectionProvider),
         ChangeNotifierProvider<LoungeStaffProvider>.value(
-          value: di.loungeStaffProvider,
+          value: widget.di.loungeStaffProvider,
         ),
         ChangeNotifierProvider<LoungeBookingProvider>.value(
-          value: di.loungeBookingProvider,
+          value: widget.di.loungeBookingProvider,
         ),
         ChangeNotifierProvider<TransportLocationProvider>.value(
-          value: di.transportLocationProvider,
+          value: widget.di.transportLocationProvider,
         ),
         ChangeNotifierProvider<DriverProvider>.value(
-          value: di.driverProvider,
+          value: widget.di.driverProvider,
         ),
       ],
       child: Consumer<AuthProvider>(

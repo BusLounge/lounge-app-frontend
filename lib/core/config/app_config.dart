@@ -3,14 +3,32 @@ class AppConfig {
   // Override with --dart-define=LOCAL_BACKEND_URL=...
   static const String _defaultBackendUrl =
       'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
+  static const String _localBackendUrlOverride =
+      String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
+  static const String _webSocketUrlOverride =
+      String.fromEnvironment('WEBSOCKET_URL', defaultValue: '');
+  static const String _webSocketPath =
+      String.fromEnvironment('WEBSOCKET_PATH', defaultValue: '/ws');
 
-  static const String baseUrl = String.fromEnvironment(
-    'LOCAL_BACKEND_URL',
-    defaultValue: _defaultBackendUrl,
-  );
+  static String get baseUrl => _localBackendUrlOverride.isNotEmpty
+      ? _localBackendUrlOverride
+      : _defaultBackendUrl;
+
+  static String get webSocketUrl {
+    if (_webSocketUrlOverride.isNotEmpty) {
+      return _webSocketUrlOverride;
+    }
+
+    final base = Uri.parse(baseUrl);
+    final wsScheme = base.scheme == 'https' ? 'wss' : 'ws';
+    final wsPath =
+        _webSocketPath.startsWith('/') ? _webSocketPath : '/$_webSocketPath';
+
+    return base.replace(scheme: wsScheme, path: wsPath).toString();
+  }
+
   static const String apiVersion = 'v1';
-  static const String apiBaseUrl =
-      baseUrl; // Already includes /api/v1 structure
+  static String get apiBaseUrl => baseUrl; // Already includes /api/v1 structure
 
   // Endpoints (relative to baseUrl)
   static const String authEndpoint = '/auth';

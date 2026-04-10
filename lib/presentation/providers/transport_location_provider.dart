@@ -9,6 +9,7 @@ class TransportLocationProvider extends ChangeNotifier {
   List<TransportLocationModel> _locations = [];
   bool _isLoading = false;
   String? _error;
+  String? _lastLoungeId;
 
   TransportLocationProvider({required this.remoteDataSource});
 
@@ -17,27 +18,50 @@ class TransportLocationProvider extends ChangeNotifier {
   String? get error => _error;
 
   /// Get all transport locations for a lounge
-  Future<void> loadTransportLocations(String loungeId) async {
-    _isLoading = true;
+  Future<void> loadTransportLocations(
+    String loungeId, {
+    bool showLoading = true,
+  }) async {
+    _lastLoungeId = loungeId;
+
+    if (showLoading) {
+      _isLoading = true;
+    }
     _error = null;
-    notifyListeners();
+    if (showLoading) {
+      notifyListeners();
+    }
 
     try {
       final locations = await remoteDataSource.getTransportLocations(loungeId);
       _locations = locations;
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
 
       await _refreshLocationPrices(loungeId);
     } on AppException catch (e) {
       _error = e.message;
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
     }
+  }
+
+  Future<void> refreshLastLounge({bool showLoading = false}) async {
+    if (_lastLoungeId == null) {
+      return;
+    }
+
+    await loadTransportLocations(_lastLoungeId!, showLoading: showLoading);
   }
 
   /// Add a new transport location

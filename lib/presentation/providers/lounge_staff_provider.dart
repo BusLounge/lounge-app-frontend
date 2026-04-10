@@ -15,6 +15,9 @@ class LoungeStaffProvider extends ChangeNotifier {
   String? _error;
   List<LoungeStaff> _staffList = [];
   LoungeStaff? _selectedStaff;
+  String? _lastLoungeId;
+  String? _lastApprovalStatus;
+  String? _lastEmploymentStatus;
 
   // Getters
   bool get isLoading => _isLoading;
@@ -84,6 +87,10 @@ class LoungeStaffProvider extends ChangeNotifier {
     String? employmentStatus,
     bool showLoading = true,
   }) async {
+    _lastLoungeId = loungeId;
+    _lastApprovalStatus = approvalStatus;
+    _lastEmploymentStatus = employmentStatus;
+
     if (showLoading) {
       _isLoading = true;
       _error = null;
@@ -126,6 +133,10 @@ class LoungeStaffProvider extends ChangeNotifier {
     required String approvalStatus,
     bool showLoading = true,
   }) async {
+    _lastLoungeId = loungeId;
+    _lastApprovalStatus = approvalStatus;
+    _lastEmploymentStatus = null;
+
     if (showLoading) {
       _isLoading = true;
       _error = null;
@@ -229,28 +240,77 @@ class LoungeStaffProvider extends ChangeNotifier {
   }
 
   /// Get my staff profile (Staff member view)
-  Future<bool> getMyStaffProfile() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<bool> getMyStaffProfile({bool showLoading = true}) async {
+    if (showLoading) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       final staff = await remoteDataSource.getMyStaffProfile();
       _selectedStaff = staff;
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
       return true;
     } on AppException catch (e) {
       _error = e.message;
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
       return false;
     } catch (e) {
       _error = 'An unexpected error occurred';
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
       return false;
     }
+  }
+
+  Future<void> refreshLastQuery({bool showLoading = false}) async {
+    if (_lastLoungeId == null) {
+      return;
+    }
+
+    if (_lastApprovalStatus != null) {
+      await getStaffByApprovalStatus(
+        loungeId: _lastLoungeId!,
+        approvalStatus: _lastApprovalStatus!,
+        showLoading: showLoading,
+      );
+      return;
+    }
+
+    await getStaffByLounge(
+      loungeId: _lastLoungeId!,
+      employmentStatus: _lastEmploymentStatus,
+      showLoading: showLoading,
+    );
+  }
+
+  Future<void> refreshForLounge(
+    String loungeId, {
+    bool showLoading = false,
+  }) async {
+    if (_lastApprovalStatus != null) {
+      await getStaffByApprovalStatus(
+        loungeId: loungeId,
+        approvalStatus: _lastApprovalStatus!,
+        showLoading: showLoading,
+      );
+      return;
+    }
+
+    await getStaffByLounge(
+      loungeId: loungeId,
+      employmentStatus: _lastEmploymentStatus,
+      showLoading: showLoading,
+    );
   }
 
   /// Update my staff profile
@@ -313,6 +373,9 @@ class LoungeStaffProvider extends ChangeNotifier {
     _error = null;
     _staffList = [];
     _selectedStaff = null;
+    _lastLoungeId = null;
+    _lastApprovalStatus = null;
+    _lastEmploymentStatus = null;
     notifyListeners();
   }
 }
