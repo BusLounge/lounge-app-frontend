@@ -26,6 +26,18 @@ class EditLoungeDetailsPage extends StatefulWidget {
 }
 
 class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
+  static const List<String> _sriLankanProvinces = [
+    'Western',
+    'Central',
+    'Southern',
+    'Northern',
+    'Eastern',
+    'North Western',
+    'North Central',
+    'Uva',
+    'Sabaragamuwa',
+  ];
+
   Lounge? _selectedLounge;
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
@@ -42,7 +54,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   final _price3HourCtrl = TextEditingController();
   final _priceUntilBusCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
-  final _stateCtrl = TextEditingController();
+  String? _selectedProvince;
   final _postalCodeCtrl = TextEditingController();
 
   late LoungeOwnerRemoteDataSource _loungeOwnerRemoteDataSource;
@@ -108,7 +120,6 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _price3HourCtrl.dispose();
     _priceUntilBusCtrl.dispose();
     _descriptionCtrl.dispose();
-    _stateCtrl.dispose();
     _postalCodeCtrl.dispose();
     super.dispose();
   }
@@ -207,7 +218,9 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     _price3HourCtrl.text = lounge.price3Hours?.toString() ?? '';
     _priceUntilBusCtrl.text = lounge.priceUntilBus?.toString() ?? '';
     _descriptionCtrl.text = lounge.description ?? '';
-    _stateCtrl.text = lounge.state ?? '';
+    final province = lounge.state?.trim();
+    _selectedProvince =
+        (province == null || province.isEmpty) ? null : province;
     _postalCodeCtrl.text = lounge.postalCode ?? '';
     _selectedDistrictId = lounge.district;
     _selectedAmenities
@@ -389,7 +402,7 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
     final updatedLounge = _selectedLounge!.copyWith(
       loungeName: _loungeNameCtrl.text.trim(),
       address: _addressCtrl.text.trim(),
-      state: _nullableText(_stateCtrl),
+      state: _selectedProvince,
       postalCode: _nullableText(_postalCodeCtrl),
       district: _selectedDistrictId,
       contactPhone: _contactPhoneCtrl.text.trim(),
@@ -758,15 +771,27 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
         Row(
           children: [
             Expanded(
-              child: TextFormField(
-                controller: _stateCtrl,
+              child: DropdownButtonFormField<String>(
+                value: _selectedProvince,
                 decoration: InputDecoration(
                   labelText: 'State/Province',
-                  hintText: 'e.g., Western',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                items: _provinceDropdownValues()
+                    .map(
+                      (province) => DropdownMenuItem<String>(
+                        value: province,
+                        child: Text(province),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedProvince = value;
+                  });
+                },
               ),
             ),
             const SizedBox(width: 16),
@@ -1258,6 +1283,15 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
   String? _nullableText(TextEditingController controller) {
     final value = controller.text.trim();
     return value.isEmpty ? null : value;
+  }
+
+  List<String> _provinceDropdownValues() {
+    final values = List<String>.from(_sriLankanProvinces);
+    final selected = _selectedProvince?.trim();
+    if (selected != null && selected.isNotEmpty && !values.contains(selected)) {
+      values.insert(0, selected);
+    }
+    return values;
   }
 
   Future<void> _loadDistricts() async {

@@ -79,12 +79,13 @@ class _StaffOtpRegistrationScreenState
     return null;
   }
 
-  // Districts and owners for selected district
+  // Districts and owners for selected owner district
   List<Map<String, dynamic>> _districts = [];
   List<Map<String, dynamic>> _ownersForSelectedDistrict = [];
 
   // Selected values
   String? _selectedDistrict;
+  String? _selectedLoungeDistrict;
   String? _selectedOwnerId;
   String? _selectedLoungeId;
 
@@ -165,12 +166,14 @@ class _StaffOtpRegistrationScreenState
 
     setState(() {
       _selectedDistrict = districtId;
+      _selectedLoungeDistrict = null;
       _selectedOwnerId = null;
       _selectedLoungeId = null;
       _loungesForSelectedOwner = [];
       _ownersForSelectedDistrict = [];
       _ownersError = null;
       _isLoadingOwners = true;
+      _isLoadingLounges = false;
     });
 
     try {
@@ -208,13 +211,44 @@ class _StaffOtpRegistrationScreenState
       _selectedOwnerId = ownerId;
       _selectedLoungeId = null;
       _loungesForSelectedOwner = [];
+      _isLoadingLounges = false;
+    });
+
+    if (_selectedLoungeDistrict != null &&
+        _selectedLoungeDistrict!.isNotEmpty) {
+      await _loadLoungesForSelectedOwnerAndDistrict();
+    }
+  }
+
+  Future<void> _onLoungeDistrictChanged(String? districtId) async {
+    if (districtId == null || districtId.isEmpty) return;
+
+    setState(() {
+      _selectedLoungeDistrict = districtId;
+      _selectedLoungeId = null;
+      _loungesForSelectedOwner = [];
       _isLoadingLounges = true;
     });
 
+    await _loadLoungesForSelectedOwnerAndDistrict();
+  }
+
+  Future<void> _loadLoungesForSelectedOwnerAndDistrict() async {
+    final ownerId = _selectedOwnerId;
+    final districtId = _selectedLoungeDistrict;
+
+    if (ownerId == null || ownerId.isEmpty) {
+      return;
+    }
+
+    if (districtId == null || districtId.isEmpty) {
+      return;
+    }
+
     try {
-      final districtId = _selectedDistrict!;
       _logger.i(
-          '📍 Fetching lounges for owner: $ownerId in district: $districtId');
+        '📍 Fetching lounges for owner: $ownerId in lounge district: $districtId',
+      );
 
       final lounges =
           await _loungeOwnerDataSource.getLoungesByOwnerAndDistrictId(
@@ -490,7 +524,7 @@ class _StaffOtpRegistrationScreenState
                     },
                   ),
                   const SizedBox(height: 16),
-                  // District Selection
+                  // Lounge Owner District Selection
                   _isLoadingDistricts
                       ? const Padding(
                           padding: EdgeInsets.all(16.0),
@@ -502,7 +536,7 @@ class _StaffOtpRegistrationScreenState
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Select District',
+                              'Select Lounge Owner\'s District',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -513,6 +547,8 @@ class _StaffOtpRegistrationScreenState
                               value: _selectedDistrict,
                               decoration: InputDecoration(
                                 prefixIcon: const Icon(Icons.map),
+                                labelText: 'District',
+                                hintText: 'Select lounge owner\'s district',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -689,7 +725,7 @@ class _StaffOtpRegistrationScreenState
                                     ),
                   const SizedBox(height: 16),
 
-                  // Lounge Selection
+                  // Lounge District Selection
                   _selectedOwnerId == null
                       ? Container(
                           padding: const EdgeInsets.all(12),
@@ -716,6 +752,86 @@ class _StaffOtpRegistrationScreenState
                             ],
                           ),
                         )
+                      : _isLoadingDistricts
+                          ? const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Select Lounge District',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedLoungeDistrict,
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(Icons.map_outlined),
+                                    labelText: 'District',
+                                    hintText: 'Select lounge district',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  items: _districts.map((district) {
+                                    final id = district['id'] as String? ?? '';
+                                    final name =
+                                        district['district'] as String? ?? '';
+                                    return DropdownMenuItem<String>(
+                                      value: id,
+                                      child: Text(name),
+                                    );
+                                  }).toList(),
+                                  onChanged: _onLoungeDistrictChanged,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please select a lounge district';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                  const SizedBox(height: 16),
+
+                  // Lounge Selection
+                  _selectedOwnerId == null || _selectedLoungeDistrict == null
+                      ? Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.info.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.info.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info, color: AppColors.info),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _selectedOwnerId == null
+                                      ? 'Select a lounge owner first'
+                                      : 'Select a lounge district first',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: AppColors.info),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
                       : _isLoadingLounges
                           ? const Padding(
                               padding: EdgeInsets.all(16.0),
@@ -728,7 +844,7 @@ class _StaffOtpRegistrationScreenState
                                   padding: const EdgeInsets.all(16.0),
                                   child: Center(
                                     child: Text(
-                                      'No lounges available for this owner',
+                                      'No lounges available for this owner in the selected district',
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium,

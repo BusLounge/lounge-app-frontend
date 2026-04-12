@@ -39,6 +39,18 @@ class _LoungeOwnerRegistrationScreenState
     'Review & Submit',
   ];
 
+  static const List<String> _sriLankanProvinces = [
+    'Western',
+    'Central',
+    'Southern',
+    'Northern',
+    'Eastern',
+    'North Western',
+    'North Central',
+    'Uva',
+    'Sabaragamuwa',
+  ];
+
   // Form keys
   final _businessInfoFormKey = GlobalKey<FormState>();
   final _loungeDetailsFormKey = GlobalKey<FormState>();
@@ -55,7 +67,7 @@ class _LoungeOwnerRegistrationScreenState
   final _loungeNameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _addressController = TextEditingController();
-  final _stateController = TextEditingController();
+  String? _selectedProvince;
   final _postalCodeController = TextEditingController();
   final _contactPhoneController = TextEditingController();
   final _capacityController = TextEditingController();
@@ -91,7 +103,6 @@ class _LoungeOwnerRegistrationScreenState
     _loungeNameController.dispose();
     _descriptionController.dispose();
     _addressController.dispose();
-    _stateController.dispose();
     _postalCodeController.dispose();
     _contactPhoneController.dispose();
     _capacityController.dispose();
@@ -734,15 +745,27 @@ class _LoungeOwnerRegistrationScreenState
           Row(
             children: [
               Expanded(
-                child: TextFormField(
-                  controller: _stateController,
+                child: DropdownButtonFormField<String>(
+                  value: _selectedProvince,
                   decoration: InputDecoration(
                     labelText: 'State/Province *',
-                    hintText: 'e.g., Western',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                  items: _sriLankanProvinces
+                      .map(
+                        (province) => DropdownMenuItem<String>(
+                          value: province,
+                          child: Text(province),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedProvince = value;
+                    });
+                  },
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Province is required';
@@ -1644,9 +1667,7 @@ class _LoungeOwnerRegistrationScreenState
           ? null
           : _descriptionController.text.trim(),
       address: _addressController.text.trim(),
-      state: _stateController.text.trim().isEmpty
-          ? null
-          : _stateController.text.trim(),
+      state: _selectedProvince,
       postalCode: _postalCodeController.text.trim().isEmpty
           ? null
           : _postalCodeController.text.trim(),
