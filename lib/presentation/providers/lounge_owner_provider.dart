@@ -47,6 +47,7 @@ class LoungeOwnerProvider with ChangeNotifier {
 
   /// Save business and manager information (Step 1)
   Future<bool> saveBusinessInfo({
+    required String ownerId,
     required String businessName,
     required String businessLicense,
     required String managerFullName,
@@ -59,6 +60,7 @@ class LoungeOwnerProvider with ChangeNotifier {
     notifyListeners();
 
     final result = await saveBusinessInfoUseCase(
+      ownerId: ownerId,
       businessName: businessName,
       businessLicense: businessLicense,
       managerFullName: managerFullName,

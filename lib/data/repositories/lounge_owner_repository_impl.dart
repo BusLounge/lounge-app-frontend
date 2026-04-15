@@ -18,6 +18,7 @@ class LoungeOwnerRepositoryImpl implements LoungeOwnerRepository {
 
   @override
   Future<Either<Failure, void>> saveBusinessInfo({
+    required String ownerId,
     required String businessName,
     required String businessLicense,
     required String managerFullName,
@@ -27,6 +28,7 @@ class LoungeOwnerRepositoryImpl implements LoungeOwnerRepository {
   }) async {
     try {
       await remoteDataSource.saveBusinessInfo(
+        ownerId: ownerId,
         businessName: businessName,
         businessLicense: businessLicense,
         managerFullName: managerFullName,

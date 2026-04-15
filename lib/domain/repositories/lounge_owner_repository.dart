@@ -6,6 +6,7 @@ import '../../core/error/failures.dart';
 abstract class LoungeOwnerRepository {
   /// Save business and manager information (Step 1)
   Future<Either<Failure, void>> saveBusinessInfo({
+    required String ownerId,
     required String businessName,
     required String businessLicense,
     required String managerFullName,

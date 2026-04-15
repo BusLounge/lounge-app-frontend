@@ -1566,6 +1566,7 @@ class _LoungeOwnerRegistrationScreenState
     }
 
     final success = await loungeOwnerProvider.saveBusinessInfo(
+      ownerId: widget.userId,
       businessName: registrationProvider.businessName ?? '',
       businessLicense: registrationProvider.businessLicense ?? '',
       managerFullName: registrationProvider.managerFullName ?? '',
@@ -1718,6 +1719,7 @@ class _LoungeOwnerRegistrationScreenState
       // Step 1: Save business info to backend
       print('📍 Screen - Saving business info to backend...');
       final businessInfoSuccess = await loungeOwnerProvider.saveBusinessInfo(
+        ownerId: widget.userId,
         businessName: registrationProvider.businessName ?? '',
         businessLicense: registrationProvider.businessLicense ?? '',
         managerFullName: registrationProvider.managerFullName ?? '',

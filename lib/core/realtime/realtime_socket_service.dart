@@ -19,6 +19,7 @@ class RealtimeSocketService {
   bool _disposed = false;
   bool _manualDisconnect = false;
   int _retryAttempt = 0;
+  static const int _maxRetryAttempts = 6;
 
   String? _activeUserId;
   List<String> _activeRoles = const [];
@@ -87,11 +88,12 @@ class RealtimeSocketService {
       _channel = channel;
       _retryAttempt = 0;
 
-      _subscription = channel.stream.listen(
+      _subscription = channel.stream.handleError((_) {
+        _scheduleReconnect();
+      }).listen(
         _handleMessage,
-        onError: (_) => _scheduleReconnect(),
         onDone: _scheduleReconnect,
-        cancelOnError: true,
+        cancelOnError: false,
       );
 
       _sendInitialSubscription();
@@ -155,6 +157,10 @@ class RealtimeSocketService {
 
     _cancelReconnectTimer();
     _retryAttempt += 1;
+
+    if (_retryAttempt > _maxRetryAttempts) {
+      return;
+    }
 
     final seconds = _calculateBackoffSeconds(_retryAttempt);
     _reconnectTimer = Timer(Duration(seconds: seconds), () async {

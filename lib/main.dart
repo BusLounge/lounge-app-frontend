@@ -109,7 +109,11 @@ class _MyAppState extends State<MyApp> {
       return;
     }
 
-    await _realtimeSocketService.connect(userId: user.id, roles: user.roles);
+    try {
+      await _realtimeSocketService.connect(userId: user.id, roles: user.roles);
+    } catch (_) {
+      // Keep app flow running even when realtime backend is unavailable.
+    }
   }
 
   Future<void> _handleRealtimeEvent(RealtimeEvent event) async {

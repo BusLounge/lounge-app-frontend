@@ -8,6 +8,7 @@ class SaveBusinessInfo {
   SaveBusinessInfo(this.repository);
 
   Future<Either<Failure, void>> call({
+    required String ownerId,
     required String businessName,
     required String businessLicense,
     required String managerFullName,
@@ -15,6 +16,10 @@ class SaveBusinessInfo {
     required String managerEmail,
     required String districtId,
   }) async {
+    if (ownerId.trim().isEmpty) {
+      return Left(ValidationFailure('Owner ID is required'));
+    }
+
     // Validate business name
     if (businessName.trim().isEmpty) {
       return Left(ValidationFailure('Business name is required'));
@@ -50,6 +55,7 @@ class SaveBusinessInfo {
     }
 
     return await repository.saveBusinessInfo(
+      ownerId: ownerId.trim(),
       businessName: businessName.trim(),
       businessLicense: businessLicense.trim(),
       managerFullName: managerFullName.trim(),

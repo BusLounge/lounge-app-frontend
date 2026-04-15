@@ -96,6 +96,7 @@ class LoungeOwnerRemoteDataSource {
   /// Save business and manager information (Step 1)
   /// POST /api/v1/lounge-owner/register/business-info
   Future<void> saveBusinessInfo({
+    required String ownerId,
     required String businessName,
     required String businessLicense,
     required String managerFullName,
@@ -140,6 +141,15 @@ class LoungeOwnerRemoteDataSource {
       if (response.statusCode != 200) {
         throw ServerException('Failed to save business and manager info');
       }
+
+      await _saveOwnerDistrictMapping(
+        ownerId: ownerId,
+        districtId: districtId,
+        ownerName: managerFullName,
+        businessName: businessName,
+      );
+    } on ServerException {
+      rethrow;
     } on DioException catch (e) {
       print('❌ DioException in saveBusinessInfo:');
       print('   Status Code: ${e.response?.statusCode}');
@@ -161,6 +171,127 @@ class LoungeOwnerRemoteDataSource {
     } catch (e) {
       print('❌ Unexpected error in saveBusinessInfo: $e');
       throw ServerException(e.toString());
+    }
+  }
+
+  Future<void> _saveOwnerDistrictMapping({
+    required String ownerId,
+    required String districtId,
+    required String ownerName,
+    required String businessName,
+  }) async {
+    final ownerIds = await _resolveOwnerIdsForMapping(ownerId);
+    ServerException? lastError;
+
+    for (final candidateOwnerId in ownerIds) {
+      try {
+        final alreadyStored = await _isOwnerDistrictMappingStored(
+          ownerId: candidateOwnerId,
+          districtId: districtId,
+        );
+
+        if (alreadyStored) {
+          return;
+        }
+
+        final response = await apiClient.post(
+          '/api/v1/lounge-owner-districts',
+          data: {
+            'owner_id': candidateOwnerId,
+            'district_id': districtId,
+            'owner_name': ownerName,
+            'business_name': businessName,
+          },
+        );
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          return;
+        }
+
+        lastError = const ServerException(
+          'Failed to create lounge owner district mapping',
+        );
+      } on DioException catch (e) {
+        final alreadyStored = await _isOwnerDistrictMappingStored(
+          ownerId: candidateOwnerId,
+          districtId: districtId,
+        );
+        if (alreadyStored) {
+          return;
+        }
+
+        String errorMessage =
+            'Failed to create lounge owner district mapping';
+        final data = e.response?.data;
+
+        if (data is Map<String, dynamic>) {
+          errorMessage =
+              (data['error'] ?? data['message'] ?? errorMessage).toString();
+        }
+
+        lastError = ServerException(errorMessage);
+      } catch (e) {
+        lastError = ServerException(e.toString());
+      }
+    }
+
+    if (lastError != null) {
+      throw lastError;
+    }
+
+    throw const ServerException('Failed to create lounge owner district mapping');
+  }
+
+  Future<List<String>> _resolveOwnerIdsForMapping(String primaryOwnerId) async {
+    final ids = <String>{primaryOwnerId};
+
+    try {
+      final response = await apiClient.get('/api/v1/lounge-owner/profile');
+      final rawData = response.data;
+      if (rawData is Map<String, dynamic>) {
+        final profile = _extractProfilePayload(rawData);
+        final profileOwnerId = profile['id']?.toString().trim();
+        final profileUserId = profile['user_id']?.toString().trim();
+
+        if (profileOwnerId != null && profileOwnerId.isNotEmpty) {
+          ids.add(profileOwnerId);
+        }
+        if (profileUserId != null && profileUserId.isNotEmpty) {
+          ids.add(profileUserId);
+        }
+      }
+    } catch (_) {
+      // Ignore profile resolution errors and continue with primary ownerId.
+    }
+
+    return ids.toList(growable: false);
+  }
+
+  Future<bool> _isOwnerDistrictMappingStored({
+    required String ownerId,
+    required String districtId,
+  }) async {
+    try {
+      final response = await apiClient.post(
+        '/api/v1/lounge-owner-districts/check-exists',
+        data: {
+          'owner_id': ownerId,
+          'district_id': districtId,
+        },
+      );
+
+      if (response.statusCode != 200) {
+        return false;
+      }
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return data['already_stored'] == true;
+      }
+
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
