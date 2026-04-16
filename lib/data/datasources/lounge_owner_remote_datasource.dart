@@ -220,8 +220,7 @@ class LoungeOwnerRemoteDataSource {
           return;
         }
 
-        String errorMessage =
-            'Failed to create lounge owner district mapping';
+        String errorMessage = 'Failed to create lounge owner district mapping';
         final data = e.response?.data;
 
         if (data is Map<String, dynamic>) {
@@ -239,7 +238,8 @@ class LoungeOwnerRemoteDataSource {
       throw lastError;
     }
 
-    throw const ServerException('Failed to create lounge owner district mapping');
+    throw const ServerException(
+        'Failed to create lounge owner district mapping');
   }
 
   Future<List<String>> _resolveOwnerIdsForMapping(String primaryOwnerId) async {

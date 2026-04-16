@@ -5,6 +5,7 @@ import '../../presentation/providers/registration_provider.dart';
 import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../domain/entities/lounge.dart';
 import '../../widgets/owner_bottom_nav_bar.dart';
+import 'lounge_details_page.dart';
 import 'edit_lounge_details_page.dart';
 
 /// Screen showing list of all lounges owned by the user
@@ -457,6 +458,23 @@ class _LoungesListScreenState extends State<LoungesListScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(
+                  Icons.visibility_outlined,
+                  color: AppColors.primary,
+                ),
+                title: const Text('View Details'),
+                subtitle: const Text('See lounge profile in detail view'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => LoungeDetailsPage(lounge: lounge),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.storefront, color: AppColors.primary),
                 title: const Text('Manage Marketplace'),

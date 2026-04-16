@@ -332,7 +332,7 @@ class LoungeStaffRemoteDataSourceImpl implements LoungeStaffRemoteDataSource {
         error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.sendTimeout) {
       return const NetworkException(
-        'Connection timeout. Please check if the backend server is running on http://192.168.79.79:8080',
+        'Connection timeout. Please check backend availability and network connectivity.',
       );
     }
 

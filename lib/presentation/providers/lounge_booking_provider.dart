@@ -318,6 +318,42 @@ class LoungeBookingProvider extends ChangeNotifier {
     }
   }
 
+  /// Fetch food orders attached to a booking
+  /// Keeps booking list state intact; used by details/order views.
+  Future<Map<String, dynamic>?> getBookingOrders({
+    required String bookingId,
+    String? date,
+  }) async {
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Prefer richer payload that includes booking + orders in one response.
+      final withOrders = await remoteDataSource.getBookingWithOrders(
+        bookingId: bookingId,
+        date: date,
+      );
+      return withOrders;
+    } on AppException catch (e) {
+      // Fallback for older backend versions that may not expose /with-orders.
+      try {
+        final ordersOnly = await remoteDataSource.getBookingOrders(
+          bookingId: bookingId,
+          date: date,
+        );
+        return ordersOnly;
+      } catch (_) {
+        _error = e.message;
+        notifyListeners();
+        return null;
+      }
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      notifyListeners();
+      return null;
+    }
+  }
+
   /// Clear error
   void clearError() {
     _error = null;

@@ -5,6 +5,7 @@ import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../presentation/providers/lounge_booking_provider.dart';
 import '../../presentation/providers/registration_provider.dart';
 import '../../config/theme_config.dart';
+import 'booking_orders_page.dart';
 
 /// Screen for viewing and managing bookings
 class BookingsScreen extends StatefulWidget {
@@ -262,51 +263,85 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         final booking = bookings[index];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  AppColors.primary.withOpacity(0.1),
-                              child: const Icon(
-                                Icons.person,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            title: Text(
-                              booking.passengerName ?? 'Guest',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
                               children: [
-                                Text(booking.loungeName ?? 'Lounge'),
-                                Text('Ref: ${booking.bookingReference}'),
-                                Text('Guests: ${booking.guestCount}'),
-                                if (booking.passengerPhone != null &&
-                                    booking.passengerPhone!.isNotEmpty)
-                                  Text('Phone: ${booking.passengerPhone}'),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        AppColors.primary.withOpacity(0.1),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    booking.passengerName ?? 'Guest',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(booking.loungeName ?? 'Lounge'),
+                                      Text('Ref: ${booking.bookingReference}'),
+                                      Text('Guests: ${booking.guestCount}'),
+                                      if (booking.passengerPhone != null &&
+                                          booking.passengerPhone!.isNotEmpty)
+                                        Text(
+                                            'Phone: ${booking.passengerPhone}'),
+                                    ],
+                                  ),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _getStatusColor(booking.status)
+                                          .withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      booking.status,
+                                      style: TextStyle(
+                                        color: _getStatusColor(booking.status),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  isThreeLine: true,
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              BookingOrdersPage(
+                                            bookingId: booking.id,
+                                            bookingReference:
+                                                booking.bookingReference,
+                                            guestName: booking.passengerName ??
+                                                'Guest',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.receipt_long),
+                                    label: const Text('View Orders'),
+                                  ),
+                                ),
                               ],
                             ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(booking.status)
-                                    .withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                booking.status,
-                                style: TextStyle(
-                                  color: _getStatusColor(booking.status),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            isThreeLine: true,
                           ),
                         );
                       },

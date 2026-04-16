@@ -2,9 +2,10 @@ class ApiConfig {
   // ============================================
   // BACKEND CONFIGURATION
   // ============================================
-  // Default to local backend and allow overrides with
-  // --dart-define=LOCAL_BACKEND_URL=...
-  static const String _defaultBackendUrl = 'http://10.0.2.2:8080';
+    // Default to Choreo backend and allow overrides with
+    // --dart-define=LOCAL_BACKEND_URL=...
+    static const String _defaultBackendUrl =
+            'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
   static const String _localBackendUrlOverride =
       String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
 

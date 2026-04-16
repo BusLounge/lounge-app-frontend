@@ -158,12 +158,16 @@ class LoungeModel extends Lounge {
       description: _extractString(json['description']),
       address: _extractString(json['address']) ?? '',
       state: _extractString(
-        json['state'] ??
+        json['state_name'] ??
+            json['stateName'] ??
+            json['state'] ??
             json['state_province'] ??
             json['province'] ??
             location['state'],
       ),
-      district: _extractString(json['district']),
+      district: _extractString(
+        json['district_name'] ?? json['districtName'] ?? json['district'],
+      ),
       country: _extractString(json['country']),
       postalCode: _extractString(
         json['postal_code'] ??

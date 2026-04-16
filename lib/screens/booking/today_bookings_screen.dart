@@ -9,6 +9,7 @@ import '../../presentation/providers/lounge_booking_provider.dart';
 import '../../presentation/providers/registration_provider.dart';
 import '../marketplace/received_food_screen.dart';
 import '../addtuk/tuk_tuk_list_page.dart';
+import 'booking_orders_page.dart';
 
 class TodayBookingsScreen extends StatefulWidget {
   final bool isStaffMode;
@@ -410,6 +411,18 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           phone: booking.passengerPhone,
                           blinkAnimation: _blinkController,
                           loungeId: _selectedLoungeId,
+                          onViewOrders: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookingOrdersPage(
+                                  bookingId: booking.id,
+                                  bookingReference: booking.bookingReference,
+                                  guestName: booking.passengerName ?? 'Guest',
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -479,6 +492,7 @@ class BookingCard extends StatelessWidget {
   final String? phone;
   final AnimationController blinkAnimation;
   final String? loungeId;
+  final VoidCallback onViewOrders;
 
   const BookingCard({
     super.key,
@@ -492,6 +506,7 @@ class BookingCard extends StatelessWidget {
     this.phone,
     required this.blinkAnimation,
     required this.loungeId,
+    required this.onViewOrders,
   });
 
   @override
@@ -589,31 +604,42 @@ class BookingCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 8),
-          Center(
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TukTukListPage(
-                      loungeId: loungeId,
-                      bookingId: bookingId,
-                      guestName: name,
-                      guestContact: phone,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TukTukListPage(
+                        loungeId: loungeId,
+                        bookingId: bookingId,
+                        guestName: name,
+                        guestContact: phone,
+                      ),
                     ),
+                  );
+                },
+                child: FadeTransition(
+                  opacity: blinkAnimation,
+                  child: _buildActionIcon(
+                    Icons.local_taxi,
+                    "Vehicle List",
+                    color: AppColors.primary,
+                    isBlinking: true,
                   ),
-                );
-              },
-              child: FadeTransition(
-                opacity: blinkAnimation,
-                child: _buildActionIcon(
-                  Icons.local_taxi,
-                  "Vehicle List",
-                  color: AppColors.primary,
-                  isBlinking: true,
                 ),
               ),
-            ),
+              GestureDetector(
+                onTap: onViewOrders,
+                child: _buildActionIcon(
+                  Icons.receipt_long,
+                  "View Orders",
+                  color: const Color(0xFF2E7D32),
+                ),
+              ),
+            ],
           ),
         ],
       ),

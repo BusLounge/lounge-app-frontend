@@ -149,7 +149,8 @@ class _MyAppState extends State<MyApp> {
       unawaited(
         widget.di.loungeOwnerProvider.getLoungeOwnerProfile(showLoading: false),
       );
-      unawaited(widget.di.registrationProvider.loadMyLounges(showLoading: false));
+      unawaited(
+          widget.di.registrationProvider.loadMyLounges(showLoading: false));
     }
 
     if (isStaffEvent) {
@@ -170,7 +171,8 @@ class _MyAppState extends State<MyApp> {
         unawaited(widget.di.loungeStaffProvider.refreshLastQuery());
       }
 
-      unawaited(widget.di.loungeStaffProvider.getMyStaffProfile(showLoading: false));
+      unawaited(
+          widget.di.loungeStaffProvider.getMyStaffProfile(showLoading: false));
     }
 
     if (isLocationEvent) {
@@ -198,7 +200,8 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
       providers: [
         // Provide the refactored providers with proper DI
-        ChangeNotifierProvider<AuthProvider>.value(value: widget.di.authProvider),
+        ChangeNotifierProvider<AuthProvider>.value(
+            value: widget.di.authProvider),
         ChangeNotifierProvider<LoungeOwnerProvider>.value(
           value: widget.di.loungeOwnerProvider,
         ),

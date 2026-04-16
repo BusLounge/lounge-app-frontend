@@ -7,6 +7,7 @@ import '../../data/models/route_model.dart';
 import '../../domain/entities/lounge.dart';
 import '../../presentation/providers/registration_provider.dart';
 import 'edit_lounge_details_page.dart';
+import 'owner_lounge_blog_details_page.dart';
 
 class LoungeDetailsPage extends StatefulWidget {
   final Lounge lounge;
@@ -120,6 +121,15 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
     }
   }
 
+  void _openViewDetailsPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OwnerLoungeBlogDetailsPage(lounge: _lounge),
+      ),
+    );
+  }
+
   Future<void> _deleteLounge() async {
     final shouldDelete = await showDialog<bool>(
       context: context,
@@ -211,6 +221,24 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeaderCard(),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openViewDetailsPage,
+                  icon: const Icon(Icons.menu_book_outlined),
+                  label: const Text('View Details'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    foregroundColor: AppColors.primary,
+                    side:
+                        const BorderSide(color: AppColors.primary, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 20),
               _buildSectionCard(
                 title: 'Basic Information',
@@ -270,7 +298,7 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
                 children: [
                   _buildInfoRow(
                     'State',
-                    _lounge.state ?? 'Not provided',
+                    _sanitizeLocationText(_lounge.state) ?? 'Not provided',
                     Icons.map,
                   ),
                   _buildInfoRow(
@@ -613,5 +641,38 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
       default:
         return Colors.grey.shade700;
     }
+  }
+
+  String? _sanitizeLocationText(String? value) {
+    if (value == null) return null;
+    final cleaned = value.trim();
+    if (cleaned.isEmpty) return null;
+
+    final lower = cleaned.toLowerCase();
+    const knownCodeLikeValues = {
+      'null',
+      'nil',
+      'undefined',
+      'n/a',
+      'na',
+      'id',
+      'unknown',
+    };
+    if (knownCodeLikeValues.contains(lower)) return null;
+
+    final isNumericOnly = RegExp(r'^\d+$').hasMatch(cleaned);
+    final isUuidLike = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    ).hasMatch(cleaned);
+    final isMongoLike = RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(cleaned);
+    final idPrefix = lower.startsWith('id_') ||
+        lower.startsWith('district_') ||
+        lower.startsWith('state_');
+
+    if (isNumericOnly || isUuidLike || isMongoLike || idPrefix) {
+      return null;
+    }
+
+    return cleaned;
   }
 }
