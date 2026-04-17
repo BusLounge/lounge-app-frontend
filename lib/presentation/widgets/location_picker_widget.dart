@@ -74,7 +74,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
   Future<void> _fetchSuggestions(String input) async {
     final url = Uri.parse(
       'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-      '?input=${Uri.encodeComponent(input)}&key=$_placesApiKey',
+      '?input=${Uri.encodeComponent(input)}&components=country:lk&region=lk&key=$_placesApiKey',
     );
     try {
       final response = await http.get(url);
@@ -272,6 +272,9 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    final visibleSuggestions = _suggestions.take(3).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Location'),
@@ -383,7 +386,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
                     ),
                   ),
                 ),
-                if (_showSuggestions && _suggestions.isNotEmpty)
+                if (_showSuggestions && visibleSuggestions.isNotEmpty)
                   Card(
                     elevation: 8,
                     margin: const EdgeInsets.only(top: 2),
@@ -393,14 +396,14 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 220),
+                        constraints: const BoxConstraints(maxHeight: 170),
                         child: ListView.separated(
                           shrinkWrap: true,
                           padding: EdgeInsets.zero,
-                          itemCount: _suggestions.length,
+                          itemCount: visibleSuggestions.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
-                            final suggestion = _suggestions[index];
+                            final suggestion = visibleSuggestions[index];
                             return ListTile(
                               dense: true,
                               leading: const Icon(Icons.location_on,
@@ -426,38 +429,39 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
           ),
 
           // Address display
-          Positioned(
-            bottom: 80,
-            left: 16,
-            right: 16,
-            child: Card(
-              elevation: 8,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Selected Location:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+          if (!isKeyboardVisible)
+            Positioned(
+              bottom: 80,
+              left: 16,
+              right: 16,
+              child: Card(
+                elevation: 8,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Selected Location:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(_address),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, '
-                      'Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(_address),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, '
+                        'Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           // Map controls (zoom + current location)
           Positioned(
