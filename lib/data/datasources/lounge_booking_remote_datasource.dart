@@ -85,6 +85,19 @@ abstract class LoungeBookingRemoteDataSource {
     double? longitude,
     String? locationName,
   });
+
+  /// Complete a lounge booking
+  /// POST /api/v1/lounge-bookings/:id/complete
+  Future<Map<String, dynamic>> completeBooking({
+    required String bookingId,
+  });
+
+  /// Update a lounge order status
+  /// PUT /api/v1/lounge-orders/:id/status
+  Future<Map<String, dynamic>> updateOrderStatus({
+    required String orderId,
+    required String status,
+  });
 }
 
 class LoungeBookingRemoteDataSourceImpl
@@ -465,6 +478,54 @@ class LoungeBookingRemoteDataSourceImpl
       final response = await apiClient.post(
         '/api/v1/lounge-bookings/$bookingId/check-in-out',
         data: payload.isEmpty ? null : payload,
+      );
+
+      if (response.data == null) {
+        throw const ServerException(
+          'Empty response from server',
+          'EMPTY_RESPONSE',
+          null,
+        );
+      }
+
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> completeBooking({
+    required String bookingId,
+  }) async {
+    try {
+      final response = await apiClient.post(
+        '/api/v1/lounge-bookings/$bookingId/complete',
+      );
+
+      if (response.data == null) {
+        throw const ServerException(
+          'Empty response from server',
+          'EMPTY_RESPONSE',
+          null,
+        );
+      }
+
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    try {
+      final response = await apiClient.put(
+        '/api/v1/lounge-orders/$orderId/status',
+        data: {'status': status},
       );
 
       if (response.data == null) {

@@ -411,17 +411,20 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           phone: booking.passengerPhone,
                           blinkAnimation: _blinkController,
                           loungeId: _selectedLoungeId,
-                          onViewOrders: () {
-                            Navigator.push(
+                          onViewOrders: () async {
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => BookingOrdersPage(
                                   bookingId: booking.id,
                                   bookingReference: booking.bookingReference,
                                   guestName: booking.passengerName ?? 'Guest',
+                                  allowStatusActions: !widget.isStaffMode,
                                 ),
                               ),
                             );
+                            if (!mounted) return;
+                            _loadBookings();
                           },
                         );
                       },

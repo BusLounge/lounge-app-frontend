@@ -321,8 +321,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: TextButton.icon(
-                                    onPressed: () {
-                                      Navigator.push(
+                                    onPressed: () async {
+                                      await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (context) =>
@@ -332,9 +332,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                                 booking.bookingReference,
                                             guestName: booking.passengerName ??
                                                 'Guest',
+                                            allowStatusActions: true,
                                           ),
                                         ),
                                       );
+                                      if (!mounted) return;
+                                      _loadBookings();
                                     },
                                     icon: const Icon(Icons.receipt_long),
                                     label: const Text('View Orders'),

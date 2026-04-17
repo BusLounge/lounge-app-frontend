@@ -9,12 +9,14 @@ class BookingOrdersPage extends StatefulWidget {
   final String bookingId;
   final String bookingReference;
   final String guestName;
+  final bool allowStatusActions;
 
   const BookingOrdersPage({
     super.key,
     required this.bookingId,
     required this.bookingReference,
     required this.guestName,
+    this.allowStatusActions = true,
   });
 
   @override
@@ -24,9 +26,12 @@ class BookingOrdersPage extends StatefulWidget {
 class _BookingOrdersPageState extends State<BookingOrdersPage> {
   bool _isLoading = true;
   String? _error;
-  List<_OrderedItem> _items = const [];
+  List<_OrderWithItems> _orders = const [];
   int _summaryCount = 0;
   String _totalAmount = '0.00';
+  String _bookingStatus = 'pending';
+  bool _isCompletingBooking = false;
+  final Set<String> _updatingOrderIds = <String>{};
   String? _loungeId;
   Map<String, LoungeProduct> _productsById = {};
 
@@ -72,10 +77,62 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
 
     setState(() {
       _isLoading = false;
-      _items = parsed.items;
+      _orders = parsed.orders;
       _summaryCount = parsed.summaryCount;
       _totalAmount = parsed.ordersTotalAmount;
+      _bookingStatus = parsed.bookingStatus;
     });
+  }
+
+  Future<void> _markBookingCompleted() async {
+    if (_isCompletingBooking) return;
+
+    setState(() => _isCompletingBooking = true);
+    final provider = context.read<LoungeBookingProvider>();
+    final message = await provider.completeBooking(bookingId: widget.bookingId);
+
+    if (!mounted) return;
+
+    setState(() => _isCompletingBooking = false);
+
+    if (message == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Failed to complete booking')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    await _loadOrders();
+  }
+
+  Future<void> _markOrderCompleted(String orderId) async {
+    if (_updatingOrderIds.contains(orderId)) return;
+
+    setState(() => _updatingOrderIds.add(orderId));
+    final provider = context.read<LoungeBookingProvider>();
+    final message = await provider.updateOrderStatus(
+      orderId: orderId,
+      status: 'completed',
+    );
+
+    if (!mounted) return;
+
+    setState(() => _updatingOrderIds.remove(orderId));
+
+    if (message == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Failed to complete order')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    await _loadOrders();
   }
 
   Future<void> _loadMarketplaceProducts(String loungeId) async {
@@ -155,7 +212,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
                         const SizedBox(height: 14),
                         _buildOrdersSummary(),
                         const SizedBox(height: 14),
-                        if (_items.isEmpty)
+                        if (_orders.isEmpty)
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -170,7 +227,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
                             ),
                           )
                         else
-                          ..._items.map(_buildOrderItemTile),
+                          ..._orders.map(_buildOrderCard),
                       ],
                     ),
                   ),
@@ -179,6 +236,9 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
   }
 
   Widget _buildBookingSummary() {
+    final isBookingCompleted = _bookingStatus.toLowerCase() == 'completed';
+    final canCompleteBooking = _bookingStatus.toLowerCase() == 'checked_in';
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -212,6 +272,50 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
               fontSize: 12,
             ),
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildStatusChip(_bookingStatus),
+              const SizedBox(width: 10),
+              if (widget.allowStatusActions && !isBookingCompleted)
+                ElevatedButton.icon(
+                  onPressed: (_isCompletingBooking || !canCompleteBooking)
+                      ? null
+                      : _markBookingCompleted,
+                  icon: _isCompletingBooking
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.done_all, size: 16),
+                  label: Text(
+                    _isCompletingBooking ? 'Completing' : 'Complete Booking',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (widget.allowStatusActions &&
+              !isBookingCompleted &&
+              !canCompleteBooking)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Booking can be completed only after check-in.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -230,6 +334,56 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
           const SizedBox(width: 10),
           _summaryChip(Icons.payments_outlined, 'Total', 'LKR $_totalAmount'),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String value) {
+    final normalized = value.trim().toLowerCase();
+    Color bg;
+    Color fg;
+
+    switch (normalized) {
+      case 'completed':
+      case 'served':
+        bg = Colors.green.withOpacity(0.12);
+        fg = const Color(0xFF2E7D32);
+        break;
+      case 'pending':
+        bg = Colors.orange.withOpacity(0.14);
+        fg = const Color(0xFFF57C00);
+        break;
+      case 'cancelled':
+        bg = Colors.red.withOpacity(0.12);
+        fg = Colors.red.shade700;
+        break;
+      default:
+        bg = AppColors.accent.withOpacity(0.2);
+        fg = AppColors.textPrimary;
+    }
+
+    final label = normalized.isEmpty
+        ? 'Unknown'
+        : normalized
+            .split('_')
+            .map((part) => part.isEmpty
+                ? part
+                : '${part[0].toUpperCase()}${part.substring(1)}')
+            .join(' ');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
       ),
     );
   }
@@ -277,7 +431,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
     );
   }
 
-  Widget _buildOrderItemTile(_OrderedItem item) {
+  Widget _buildOrderCard(_OrderWithItems order) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -286,11 +440,87 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Order ${order.displayOrderNumber}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              _buildStatusChip(order.status),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...order.items.map(_buildOrderItemTile),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${order.items.length} items • Total LKR ${order.displayTotalAmount}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (widget.allowStatusActions &&
+                  !order.isPreOrderGroup &&
+                  order.id.isNotEmpty &&
+                  order.status.toLowerCase() != 'completed')
+                ElevatedButton.icon(
+                  onPressed: _updatingOrderIds.contains(order.id)
+                      ? null
+                      : () => _markOrderCompleted(order.id),
+                  icon: _updatingOrderIds.contains(order.id)
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_circle, size: 16),
+                  label: Text(
+                    _updatingOrderIds.contains(order.id)
+                        ? 'Updating'
+                        : 'Mark Completed',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderItemTile(_OrderedItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.fastfood, color: AppColors.primary, size: 20),
-          const SizedBox(width: 10),
+          const Icon(Icons.fastfood, color: AppColors.primary, size: 18),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,8 +555,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                ] else ...[
+                ] else
                   Text(
                     'LKR ${item.displayActualUnitPrice}',
                     style: const TextStyle(
@@ -335,8 +564,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                ],
+                const SizedBox(height: 2),
                 Text(
                   'Qty ${item.quantity} • Total LKR ${item.displayTotalPrice}',
                   style: const TextStyle(
@@ -347,7 +575,7 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -369,28 +597,36 @@ class _BookingOrdersPageState extends State<BookingOrdersPage> {
 }
 
 class _BookingOrdersViewData {
-  final List<_OrderedItem> items;
+  final List<_OrderWithItems> orders;
   final int summaryCount;
   final String ordersTotalAmount;
+  final String bookingStatus;
 
   const _BookingOrdersViewData({
-    required this.items,
+    required this.orders,
     required this.summaryCount,
     required this.ordersTotalAmount,
+    required this.bookingStatus,
   });
 
   factory _BookingOrdersViewData.fromApi(
     Map<String, dynamic> data, {
     Map<String, LoungeProduct> productsById = const {},
   }) {
-    final orders = _extractOrders(data);
-    final extractedItems = <_OrderedItem>[];
+    final rawOrders = _extractOrders(data);
+    final extractedOrders = <_OrderWithItems>[];
 
-    for (final order in orders) {
+    for (final order in rawOrders) {
+      final orderId = order['id']?.toString() ?? '';
+      final orderNumber = order['order_number']?.toString();
+      final orderStatus = order['status']?.toString() ??
+          order['order_status']?.toString() ??
+          'pending';
       final orderItems = (order['items'] as List<dynamic>?) ??
           (order['order_items'] as List<dynamic>?) ??
           (order['ordered_items'] as List<dynamic>?) ??
           const [];
+      final extractedItems = <_OrderedItem>[];
 
       for (final item in orderItems) {
         if (item is! Map<String, dynamic>) continue;
@@ -435,11 +671,34 @@ class _BookingOrdersViewData {
           ),
         );
       }
+
+      final orderTotalFromItems = extractedItems.fold<double>(
+        0,
+        (sum, item) => sum + item.totalPriceAsDouble,
+      );
+      final orderTotalFromBackend = _priceFromJson(order['total_amount']) ??
+          _priceFromJson(order['amount']) ??
+          0;
+
+      extractedOrders.add(
+        _OrderWithItems(
+          id: orderId,
+          orderNumber: orderNumber,
+          status: orderStatus,
+          items: extractedItems,
+          totalAmount: orderTotalFromItems > 0
+              ? orderTotalFromItems
+              : orderTotalFromBackend,
+        ),
+      );
     }
 
     final bookingMap = _extractBooking(data);
+    final bookingStatus = bookingMap?['status']?.toString() ?? 'pending';
     final preOrdersRaw =
         (bookingMap?['pre_orders'] as List<dynamic>?) ?? const [];
+
+    final preOrderItems = <_OrderedItem>[];
     for (final preOrder in preOrdersRaw) {
       if (preOrder is! Map<String, dynamic>) continue;
 
@@ -468,7 +727,7 @@ class _BookingOrdersViewData {
                 unitPrice: referenceUnitPrice,
               ));
 
-      extractedItems.add(
+      preOrderItems.add(
         _OrderedItem(
           name: '$name (Pre-order)',
           quantity: quantity,
@@ -479,17 +738,34 @@ class _BookingOrdersViewData {
       );
     }
 
+    if (preOrderItems.isNotEmpty) {
+      final preOrderTotal = preOrderItems.fold<double>(
+        0,
+        (sum, item) => sum + item.totalPriceAsDouble,
+      );
+      extractedOrders.add(
+        _OrderWithItems(
+          id: 'pre-orders',
+          orderNumber: 'Pre-orders',
+          status: bookingStatus,
+          items: preOrderItems,
+          totalAmount: preOrderTotal,
+          isPreOrderGroup: true,
+        ),
+      );
+    }
+
     final summaryCountRaw = data['orders_count'] ?? data['count'];
     final summaryCount = summaryCountRaw is int
         ? summaryCountRaw
         : int.tryParse(summaryCountRaw?.toString() ?? '') ?? 0;
 
-    final itemsCount = extractedItems.length;
+    final itemsCount = extractedOrders.length;
     final effectiveCount = summaryCount > 0 ? summaryCount : itemsCount;
 
-    final totalFromItems = extractedItems.fold<double>(
+    final totalFromItems = extractedOrders.fold<double>(
       0,
-      (sum, item) => sum + item.totalPriceAsDouble,
+      (sum, order) => sum + order.totalAmount,
     );
 
     final backendTotal = _priceFromJson(data['orders_total_amount']) ??
@@ -501,9 +777,10 @@ class _BookingOrdersViewData {
         totalFromItems > 0 ? totalFromItems : (backendTotal + bookingMapTotal);
 
     return _BookingOrdersViewData(
-      items: extractedItems,
+      orders: extractedOrders,
       summaryCount: effectiveCount,
       ordersTotalAmount: total.toStringAsFixed(2),
+      bookingStatus: bookingStatus,
     );
   }
 
@@ -581,6 +858,36 @@ class _BookingOrdersViewData {
     if (unitPrice == null) return 0;
     return unitPrice * quantity;
   }
+}
+
+class _OrderWithItems {
+  final String id;
+  final String? orderNumber;
+  final String status;
+  final List<_OrderedItem> items;
+  final double totalAmount;
+  final bool isPreOrderGroup;
+
+  const _OrderWithItems({
+    required this.id,
+    this.orderNumber,
+    required this.status,
+    required this.items,
+    required this.totalAmount,
+    this.isPreOrderGroup = false,
+  });
+
+  String get displayOrderNumber {
+    if (orderNumber != null && orderNumber!.trim().isNotEmpty) {
+      return orderNumber!;
+    }
+    if (id.isNotEmpty) {
+      return '#${id.length > 8 ? id.substring(0, 8) : id}';
+    }
+    return 'N/A';
+  }
+
+  String get displayTotalAmount => totalAmount.toStringAsFixed(2);
 }
 
 class _OrderedItem {

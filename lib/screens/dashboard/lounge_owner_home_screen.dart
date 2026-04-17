@@ -15,6 +15,7 @@ import '../bus_sedule/upcoming_bus_schedule.dart';
 import '../lounge/edit_lounge_details_page.dart';
 import '../lounge/lounge_details_page.dart';
 import '../booking/today_bookings_screen.dart';
+import '../bus/qr_scanner_screen.dart';
 import '../addtuk/tuktuk_service_settings.dart';
 import '../addtuk/driver_list_page.dart';
 import '../location/location_list_screen.dart';
@@ -332,6 +333,19 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                                           MaterialPageRoute(
                                             builder: (context) =>
                                                 const TodayBookingsScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    _buildActionTile(
+                                      label: 'QR Scanner',
+                                      icon: Icons.qr_code_scanner,
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const QrScannerScreen(),
                                           ),
                                         );
                                       },

@@ -354,6 +354,60 @@ class LoungeBookingProvider extends ChangeNotifier {
     }
   }
 
+  /// Complete a booking and reflect status in current list state.
+  Future<String?> completeBooking({required String bookingId}) async {
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result =
+          await remoteDataSource.completeBooking(bookingId: bookingId);
+      _bookings = _bookings.map((booking) {
+        if (booking.id == bookingId) {
+          return LoungeBookingModel.fromEntity(booking)
+              .copyWithStatus('completed');
+        }
+        return booking;
+      }).toList();
+      notifyListeners();
+      return result['message']?.toString() ?? 'Booking completed successfully';
+    } on AppException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Update in-lounge order status for a booking order.
+  Future<String?> updateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result = await remoteDataSource.updateOrderStatus(
+        orderId: orderId,
+        status: status,
+      );
+      notifyListeners();
+      return result['message']?.toString() ?? 'Order status updated';
+    } on AppException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      notifyListeners();
+      return null;
+    }
+  }
+
   /// Clear error
   void clearError() {
     _error = null;
@@ -367,5 +421,30 @@ class LoungeBookingProvider extends ChangeNotifier {
     _bookings = [];
     _selectedBooking = null;
     notifyListeners();
+  }
+}
+
+extension on LoungeBookingModel {
+  LoungeBookingModel copyWithStatus(String status) {
+    return LoungeBookingModel(
+      id: id,
+      loungeId: loungeId,
+      passengerId: passengerId,
+      bookingReference: bookingReference,
+      checkInTime: checkInTime,
+      checkOutTime: checkOutTime,
+      durationHours: durationHours,
+      guestCount: guestCount,
+      status: status,
+      amountPaid: amountPaid,
+      paymentMethod: paymentMethod,
+      specialRequests: specialRequests,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      loungeName: loungeName,
+      loungeAddress: loungeAddress,
+      passengerName: passengerName,
+      passengerPhone: passengerPhone,
+    );
   }
 }
