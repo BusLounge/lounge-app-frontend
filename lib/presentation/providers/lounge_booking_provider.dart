@@ -58,7 +58,6 @@ class LoungeBookingProvider extends ChangeNotifier {
       );
 
       _bookings = bookingModels;
-      await _autoCheckoutExpiredCheckedInBookings();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -88,7 +87,6 @@ class LoungeBookingProvider extends ChangeNotifier {
         loungeId: loungeId,
       );
       _bookings = bookingModels;
-      await _autoCheckoutExpiredCheckedInBookings();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -298,7 +296,6 @@ class LoungeBookingProvider extends ChangeNotifier {
       );
 
       _bookings = result['bookings'] as List<LoungeBooking>;
-      await _autoCheckoutExpiredCheckedInBookings();
       _isLoading = false;
       notifyListeners();
 

@@ -1,24 +1,8 @@
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
-  // API Configuration - local backend by default.
+  // API Configuration - Choreo backend by default.
   // Override with --dart-define=LOCAL_BACKEND_URL=...
-  static String get _defaultBackendUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8080';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:8080';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-        return 'http://localhost:8080';
-    }
-  }
+  static const String _defaultBackendUrl =
+      'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
 
   static const String _localBackendUrlOverride =
       String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
