@@ -1,24 +1,28 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../config/theme_config.dart';
+import 'package:http/http.dart' as http;
+
 import '../../config/constants.dart';
-import '../../presentation/providers/lounge_owner_provider.dart';
+import '../../config/theme_config.dart';
 import '../../presentation/providers/auth_provider.dart';
+import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../presentation/providers/registration_provider.dart';
-import '../../domain/entities/lounge.dart';
 import '../../widgets/owner_bottom_nav_bar.dart';
-import '../staff/staff_registration_page.dart';
-import '../staff/staff_list_page.dart';
 import '../addtuk/add_tuk_tuk_page.dart';
-import '../bus_sedule/upcoming_bus_schedule.dart';
-import '../lounge/edit_lounge_details_page.dart';
-import '../lounge/lounge_details_page.dart';
+import '../addtuk/driver_list_page.dart';
+import '../addtuk/tuktuk_service_settings.dart';
 import '../booking/today_bookings_screen.dart';
 import '../bus/qr_scanner_screen.dart';
-import '../addtuk/tuktuk_service_settings.dart';
-import '../addtuk/driver_list_page.dart';
+import '../bus_sedule/upcoming_bus_schedule.dart';
 import '../location/location_list_screen.dart';
+import '../lounge/edit_lounge_details_page.dart';
+import '../staff/staff_list_page.dart';
+import '../staff/staff_registration_page.dart';
 
 class LoungeOwnerHomeScreen extends StatefulWidget {
   const LoungeOwnerHomeScreen({super.key});
@@ -29,19 +33,64 @@ class LoungeOwnerHomeScreen extends StatefulWidget {
 
 class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
   bool _hideApprovedVerificationBanner = false;
+  late final PageController _currencyPageController;
+  late final Future<_CurrencyRatesData> _currencyRatesFuture;
+  late Future<_WeatherSnapshot> _weatherFuture;
+  late DateTime _currentTime;
+  StreamSubscription<dynamic>? _timeSubscription;
+  Timer? _clockUiTimer;
+  Timer? _weatherTimer;
+  int _currencyPageIndex = 0;
+
+  static const EventChannel _systemTimeChannel = EventChannel(
+    'lounge_owner_app/system_time_updates',
+  );
 
   @override
   void initState() {
     super.initState();
-    // Load lounge owner profile and lounges when screen loads
+    _currencyPageController = PageController(viewportFraction: 0.88);
+    _currentTime = DateTime.now();
+    _currencyRatesFuture = _loadCurrencyRates();
+    _weatherFuture = _loadWeatherSnapshot();
+    _timeSubscription = _systemTimeChannel.receiveBroadcastStream().listen(
+      (event) {
+        if (!mounted) return;
+        final milliseconds = event as int;
+        setState(() {
+          _currentTime = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+        });
+      },
+      onError: (_) {},
+    );
+    // Keep the clock label live even when the OS does not emit time-change events.
+    _clockUiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _currentTime = DateTime.now();
+      });
+    });
+    _weatherTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _refreshWeather();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
   }
 
+  @override
+  void dispose() {
+    _timeSubscription?.cancel();
+    _clockUiTimer?.cancel();
+    _weatherTimer?.cancel();
+    _currencyPageController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
-    await Future.wait([_loadProfile(), _loadMyLounges()]);
+    await _loadProfile();
     await _loadVerificationBannerPreference();
+    await _refreshWeather();
   }
 
   String _verificationBannerPrefKey(String? userId) {
@@ -72,6 +121,20 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     });
   }
 
+  Future<void> _refreshWeather() async {
+    if (!mounted) return;
+
+    final loungeOwner = Provider.of<LoungeOwnerProvider>(
+      context,
+      listen: false,
+    ).loungeOwner;
+    final district = loungeOwner?.district;
+
+    setState(() {
+      _weatherFuture = _loadWeatherSnapshot(district: district);
+    });
+  }
+
   Future<void> _loadProfile() async {
     final loungeOwnerProvider = Provider.of<LoungeOwnerProvider>(
       context,
@@ -81,13 +144,11 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
 
     final success = await loungeOwnerProvider.getLoungeOwnerProfile();
 
-    // If profile load failed due to auth issues, logout
     if (!success && mounted) {
       final error = loungeOwnerProvider.error?.toLowerCase() ?? '';
       if (error.contains('unauthorized') ||
           error.contains('401') ||
           error.contains('not authenticated')) {
-        // Auth token is invalid, logout user
         await authProvider.logout();
 
         if (!mounted) return;
@@ -107,18 +168,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     }
   }
 
-  Future<void> _loadMyLounges() async {
-    final registrationProvider = Provider.of<RegistrationProvider>(
-      context,
-      listen: false,
-    );
-    print('🏠 Dashboard - Loading my lounges...');
-    await registrationProvider.loadMyLounges();
-    print(
-      '🏠 Dashboard - Loaded ${registrationProvider.myLounges.length} lounges',
-    );
-  }
-
   Future<void> _logout() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final loungeOwnerProvider = Provider.of<LoungeOwnerProvider>(
@@ -132,13 +181,14 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
 
     await authProvider.logout();
     loungeOwnerProvider.clearData();
-    registrationProvider.reset(); // Clear cached registration data
+    registrationProvider.reset();
 
     if (!mounted) return;
 
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppConstants.phoneInputRoute, (route) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      AppConstants.phoneInputRoute,
+      (route) => false,
+    );
   }
 
   Future<void> _confirmAndLogout() async {
@@ -170,17 +220,288 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     }
   }
 
+  String _greetingForHour(int hour) {
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String _displayName(String? managerFullName, String? businessName) {
+    final cleanedManagerName = managerFullName?.trim();
+    if (cleanedManagerName != null && cleanedManagerName.isNotEmpty) {
+      return cleanedManagerName;
+    }
+
+    final cleanedBusinessName = businessName?.trim();
+    if (cleanedBusinessName != null && cleanedBusinessName.isNotEmpty) {
+      return cleanedBusinessName;
+    }
+
+    return 'there';
+  }
+
+  Future<_CurrencyRatesData> _loadCurrencyRates() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://open.er-api.com/v6/latest/USD'),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load exchange rates');
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final rates = decoded['rates'] as Map<String, dynamic>?;
+      if (rates == null) {
+        throw Exception('Missing exchange rates');
+      }
+
+      final lkrPerUsd = (rates['LKR'] as num?)?.toDouble() ?? 0;
+      if (lkrPerUsd <= 0) {
+        throw Exception('Invalid LKR rate');
+      }
+
+      double convertToLkr(String currencyCode) {
+        final baseRate = currencyCode == 'USD'
+            ? 1.0
+            : (rates[currencyCode] as num?)?.toDouble() ?? 0;
+        if (baseRate <= 0) return 0;
+        return lkrPerUsd / baseRate;
+      }
+
+      return _CurrencyRatesData(
+        isLive: true,
+        lastUpdated: DateTime.now(),
+        items: [
+        _CurrencyRateItem(
+          code: 'USD',
+          name: 'US Dollar',
+          icon: Icons.attach_money_rounded,
+          lkrValue: lkrPerUsd,
+          subtitle: '1 USD',
+        ),
+        _CurrencyRateItem(
+          code: 'EUR',
+          name: 'Euro',
+          icon: Icons.euro_rounded,
+          lkrValue: convertToLkr('EUR'),
+          subtitle: '1 EUR',
+        ),
+        _CurrencyRateItem(
+          code: 'GBP',
+          name: 'British Pound',
+          icon: Icons.currency_pound_rounded,
+          lkrValue: convertToLkr('GBP'),
+          subtitle: '1 GBP',
+        ),
+        _CurrencyRateItem(
+          code: 'INR',
+          name: 'Indian Rupee',
+          icon: Icons.currency_rupee_rounded,
+          lkrValue: convertToLkr('INR'),
+          subtitle: '1 INR',
+        ),
+        _CurrencyRateItem(
+          code: 'AED',
+          name: 'UAE Dirham',
+          icon: Icons.currency_exchange_rounded,
+          lkrValue: convertToLkr('AED'),
+          subtitle: '1 AED',
+        ),
+        _CurrencyRateItem(
+          code: 'AUD',
+          name: 'Australian Dollar',
+          icon: Icons.payments_rounded,
+          lkrValue: convertToLkr('AUD'),
+          subtitle: '1 AUD',
+        ),
+        ].where((item) => item.lkrValue > 0).toList(),
+      );
+    } catch (_) {
+      return const _CurrencyRatesData(
+        isLive: false,
+        lastUpdated: null,
+        items: [
+          _CurrencyRateItem(
+            code: 'USD',
+            name: 'US Dollar',
+            icon: Icons.attach_money_rounded,
+            lkrValue: 300.0,
+            subtitle: '1 USD',
+          ),
+          _CurrencyRateItem(
+            code: 'EUR',
+            name: 'Euro',
+            icon: Icons.euro_rounded,
+            lkrValue: 325.0,
+            subtitle: '1 EUR',
+          ),
+          _CurrencyRateItem(
+            code: 'GBP',
+            name: 'British Pound',
+            icon: Icons.currency_pound_rounded,
+            lkrValue: 380.0,
+            subtitle: '1 GBP',
+          ),
+          _CurrencyRateItem(
+            code: 'INR',
+            name: 'Indian Rupee',
+            icon: Icons.currency_rupee_rounded,
+            lkrValue: 3.6,
+            subtitle: '1 INR',
+          ),
+          _CurrencyRateItem(
+            code: 'AED',
+            name: 'UAE Dirham',
+            icon: Icons.currency_exchange_rounded,
+            lkrValue: 82.0,
+            subtitle: '1 AED',
+          ),
+          _CurrencyRateItem(
+            code: 'AUD',
+            name: 'Australian Dollar',
+            icon: Icons.payments_rounded,
+            lkrValue: 195.0,
+            subtitle: '1 AUD',
+          ),
+        ],
+      );
+    }
+  }
+
+  Widget _buildGreetingCard({
+    required String greeting,
+    required String userName,
+  }) {
+    final isMorning = greeting == 'Good morning';
+    final isAfternoon = greeting == 'Good afternoon';
+    final isEvening = !isMorning && !isAfternoon;
+
+    final background = isMorning
+        ? const LinearGradient(
+            colors: [Color(0xFFB8D9FF), Color(0xFF2F7BEA)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : isAfternoon
+            ? const LinearGradient(
+                colors: [Color(0xFF8FC6FF), Color(0xFF2563EB)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : const LinearGradient(
+                colors: [Color(0xFF1B4B8F), Color(0xFF0A2046)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              );
+
+    final icon = isMorning
+        ? Icons.wb_sunny_rounded
+        : isAfternoon
+            ? Icons.wb_twilight_rounded
+            : Icons.nightlight_round_rounded;
+
+    final titleColor = isEvening ? const Color(0xFFE8F1FF) : Colors.white;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: background,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1F6FEA).withOpacity(0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -10,
+            top: -14,
+            child: Container(
+              width: 128,
+              height: 128,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.10),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: -6,
+            child: Opacity(
+              opacity: isEvening ? 0.96 : 0.18,
+              child: Image.asset(
+                'assets/images/lior_logo_no_bg.png',
+                width: 98,
+                height: 98,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.16)),
+                ),
+                child: Icon(icon, color: Colors.white, size: 30),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$greeting, $userName',
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Here is your lounge overview for today.',
+                      style: TextStyle(
+                        color: titleColor.withOpacity(0.92),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const bg = Color(0xFFFFFBF5);
 
-    return Consumer3<LoungeOwnerProvider, AuthProvider, RegistrationProvider>(
-      builder: (context, loungeOwnerProvider, authProvider,
-          registrationProvider, child) {
+    return Consumer2<LoungeOwnerProvider, AuthProvider>(
+      builder: (context, loungeOwnerProvider, authProvider, child) {
         final loungeOwner = loungeOwnerProvider.loungeOwner;
-        final lounges = registrationProvider.myLounges;
         final isLoading =
-            loungeOwnerProvider.isLoading || registrationProvider.isLoading;
+            loungeOwnerProvider.isLoading || authProvider.isLoading;
+        final userName = _displayName(
+          loungeOwner?.managerFullName,
+          loungeOwner?.businessName,
+        );
+        final greeting = _greetingForHour(DateTime.now().hour);
 
         return Scaffold(
           backgroundColor: bg,
@@ -214,54 +535,17 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Verification Status Banner
                           _buildVerificationBanner(
                             loungeOwner?.verificationStatus,
                           ),
-
                           const SizedBox(height: 18),
-
-                          // My Lounges Section
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'My Lounges',
-                                style: TextStyle(
-                                  color: Colors.black87,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 18,
-                                ),
-                              ),
-                              if (lounges.isNotEmpty)
-                                Text(
-                                  '${lounges.length} lounge${lounges.length == 1 ? '' : 's'}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                            ],
+                          _buildGreetingCard(
+                            greeting: greeting,
+                            userName: userName,
                           ),
-                          const SizedBox(height: 12),
-
-                          // Lounge List or Empty State
-                          if (lounges.isEmpty)
-                            _buildEmptyState()
-                          else
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: lounges.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 12),
-                              itemBuilder: (context, index) =>
-                                  _buildLoungeCard(lounges[index]),
-                            ),
-
-                          const SizedBox(height: 24),
-
-                          // Quick Actions
+                          const SizedBox(height: 16),
+                          _buildExchangeRatesSection(),
+                          const SizedBox(height: 18),
                           const Text(
                             'Quick Actions',
                             style: TextStyle(
@@ -271,8 +555,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-
-                          // Check if account is approved
                           loungeOwner?.verificationStatus != 'approved'
                               ? _buildPendingActionsMessage()
                               : GridView.count(
@@ -417,7 +699,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                                     ),
                                   ],
                                 ),
-
                           const SizedBox(height: 36),
                         ],
                       ),
@@ -433,35 +714,490 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     );
   }
 
+  Widget _buildExchangeRatesSection() {
+    return FutureBuilder<_CurrencyRatesData>(
+      future: _currencyRatesFuture,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        final items = data?.items ?? const <_CurrencyRateItem>[];
+        final isLive = data?.isLive ?? false;
+        final lastUpdated = data?.lastUpdated;
+        final statusLabel = isLive ? 'Live' : 'Fallback';
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFD8E8FF)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2F7BEA).withOpacity(0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFB9D9FF), Color(0xFF2F7BEA)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.currency_exchange_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Today\'s exchange rates',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF123A73),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'USD and major currencies converted to LKR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF5F7FAE),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildStatusChip(
+                              label: statusLabel,
+                              icon: isLive
+                                  ? Icons.wifi_tethering_rounded
+                                  : Icons.cloud_off_rounded,
+                              filled: isLive,
+                            ),
+                            if (lastUpdated != null)
+                              _buildStatusChip(
+                                label: 'Updated ${_formatLastUpdated(lastUpdated)}',
+                                icon: Icons.schedule_rounded,
+                                filled: false,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Text(
+                    'Exchange rates are not available right now.',
+                    style: TextStyle(color: Color(0xFF5F7FAE)),
+                  ),
+                )
+              else ...[
+                SizedBox(
+                  height: 170,
+                  child: PageView.builder(
+                    controller: _currencyPageController,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currencyPageIndex = index;
+                      });
+                    },
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: _buildCurrencyRateCard(item),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(items.length, (index) {
+                    final isActive = index == _currencyPageIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: isActive ? 18 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? const Color(0xFF2F7BEA)
+                            : const Color(0xFFC7D9F7),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCurrencyRateCard(_CurrencyRateItem item) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFFFFF), Color(0xFFF5F9FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFD8E8FF)),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Icon(
+              item.icon,
+              color: const Color(0xFFB9D9FF),
+              size: 68,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF2FF),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      item.code,
+                      style: const TextStyle(
+                        color: Color(0xFF245DBA),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      color: Color(0xFF6A86AA),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                item.subtitle,
+                style: const TextStyle(
+                  color: Color(0xFF6A86AA),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'LKR ${item.lkrValue.toStringAsFixed(item.code == 'INR' ? 2 : 2)}',
+                style: const TextStyle(
+                  color: Color(0xFF123A73),
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'per 1 unit',
+                style: TextStyle(
+                  color: Color(0xFF7D99BE),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip({
+    required String label,
+    required IconData icon,
+    required bool filled,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: filled ? const Color(0xFFEAF2FF) : const Color(0xFFF5F9FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFD6E6FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF245DBA)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF245DBA),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatLastUpdated(DateTime dateTime) {
+    const dayLabels = [
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
+    ];
+    final dayLabel = dayLabels[dateTime.weekday - 1];
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    return '$dayLabel, $day/$month $hour:$minute';
+  }
+
+  Widget _buildTopBadge({
+    required IconData icon,
+    required String label,
+    bool filled = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: filled ? const Color(0xFFDDEAFF) : const Color(0xFFF5F9FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFD6E6FF), width: 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: const Color(0xFF245DBA)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF245DBA),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_WeatherSnapshot> _loadWeatherSnapshot({String? district}) async {
+    final query = (district?.trim().isNotEmpty ?? false)
+        ? district!.trim()
+        : 'Colombo';
+
+    try {
+      final geoResponse = await http.get(
+        Uri.parse(
+          'https://geocoding-api.open-meteo.com/v1/search?name=${Uri.encodeComponent(query)}&count=1&language=en&format=json',
+        ),
+      );
+
+      if (geoResponse.statusCode != 200) {
+        throw Exception('Geocoding failed');
+      }
+
+      final geoJson = jsonDecode(geoResponse.body) as Map<String, dynamic>;
+      final results = geoJson['results'] as List<dynamic>?;
+      if (results == null || results.isEmpty) {
+        throw Exception('No geocoding result');
+      }
+
+      final location = results.first as Map<String, dynamic>;
+      final latitude = (location['latitude'] as num).toDouble();
+      final longitude = (location['longitude'] as num).toDouble();
+      final placeName = (location['name'] as String?) ?? query;
+
+      final weatherResponse = await http.get(
+        Uri.parse(
+          'https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,weather_code&timezone=auto',
+        ),
+      );
+
+      if (weatherResponse.statusCode != 200) {
+        throw Exception('Weather fetch failed');
+      }
+
+      final weatherJson = jsonDecode(weatherResponse.body) as Map<String, dynamic>;
+      final current = weatherJson['current'] as Map<String, dynamic>?;
+      if (current == null) {
+        throw Exception('No current weather');
+      }
+
+      final temperature = (current['temperature_2m'] as num?)?.toDouble() ?? 0;
+      final weatherCode = (current['weather_code'] as num?)?.toInt() ?? 0;
+
+      return _WeatherSnapshot(
+        isLive: true,
+        lastUpdated: DateTime.now(),
+        locationName: placeName,
+        temperatureC: temperature,
+        weatherLabel: _weatherLabel(weatherCode),
+        weatherIcon: _weatherIcon(weatherCode),
+      );
+    } catch (_) {
+      return const _WeatherSnapshot(
+        isLive: false,
+        lastUpdated: null,
+        locationName: 'Colombo',
+        temperatureC: 29,
+        weatherLabel: 'Mostly sunny',
+        weatherIcon: Icons.wb_sunny_rounded,
+      );
+    }
+  }
+
+  String _weatherLabel(int code) {
+    switch (code) {
+      case 0:
+        return 'Clear';
+      case 1:
+      case 2:
+      case 3:
+        return 'Partly cloudy';
+      case 45:
+      case 48:
+        return 'Fog';
+      case 51:
+      case 53:
+      case 55:
+        return 'Drizzle';
+      case 61:
+      case 63:
+      case 65:
+        return 'Rain';
+      case 71:
+      case 73:
+      case 75:
+        return 'Snow';
+      case 95:
+      case 96:
+      case 99:
+        return 'Storm';
+      default:
+        return 'Weather';
+    }
+  }
+
+  IconData _weatherIcon(int code) {
+    switch (code) {
+      case 0:
+        return Icons.wb_sunny_rounded;
+      case 1:
+      case 2:
+      case 3:
+        return Icons.wb_cloudy_rounded;
+      case 45:
+      case 48:
+        return Icons.foggy;
+      case 51:
+      case 53:
+      case 55:
+      case 61:
+      case 63:
+      case 65:
+        return Icons.beach_access_rounded;
+      case 71:
+      case 73:
+      case 75:
+        return Icons.ac_unit_rounded;
+      case 95:
+      case 96:
+      case 99:
+        return Icons.thunderstorm_rounded;
+      default:
+        return Icons.wb_sunny_rounded;
+    }
+  }
+
   Widget _buildVerificationBanner(String? status) {
     if (status == null) return const SizedBox.shrink();
 
     if (status == 'approved' && _hideApprovedVerificationBanner) {
       return Align(
         alignment: Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFF4CAF50), width: 1.2),
-          ),
-          child: const Row(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.verified,
-                color: Color(0xFF2E7D32),
-                size: 16,
+              _buildTopBadge(
+                icon: Icons.verified_rounded,
+                label: 'Verified',
+                filled: true,
               ),
-              SizedBox(width: 6),
-              Text(
-                'Verified',
-                style: TextStyle(
-                  color: Color(0xFF2E7D32),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
+              const SizedBox(width: 8),
+              _buildTopBadge(
+                icon: Icons.schedule_rounded,
+                label: _formatLastUpdated(_currentTime),
+              ),
+              const SizedBox(width: 8),
+              FutureBuilder<_WeatherSnapshot>(
+                future: _weatherFuture,
+                builder: (context, snapshot) {
+                  final weather = snapshot.data;
+                  final label = weather == null
+                      ? 'Weather'
+                      : '${weather.temperatureC.toStringAsFixed(0)}°C · ${weather.weatherLabel}';
+
+                  return _buildTopBadge(
+                    icon: weather?.weatherIcon ?? Icons.wb_sunny_rounded,
+                    label: label,
+                  );
+                },
               ),
             ],
           ),
@@ -494,10 +1230,10 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
         subtitle = 'Please contact support for more information.';
         break;
       case 'approved':
-        bgColor = const Color(0xFFE8F5E9);
-        borderColor = const Color(0xFF4CAF50);
-        textColor = const Color(0xFF2E7D32);
-        icon = Icons.verified;
+        bgColor = const Color(0xFFEAF2FF);
+        borderColor = const Color(0xFFB9D9FF);
+        textColor = const Color(0xFF245DBA);
+        icon = Icons.verified_rounded;
         title = 'Account Verified';
         subtitle = 'Your account has been approved!';
         break;
@@ -513,291 +1249,123 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor, width: 1.5),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: textColor, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+      child: status == 'approved'
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Row(
+                  children: [
+                    _buildTopBadge(
+                      icon: Icons.verified_rounded,
+                      label: 'Verified',
+                      filled: true,
+                    ),
+                    const Spacer(),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildTopBadge(
+                            icon: Icons.schedule_rounded,
+                            label: _formatLastUpdated(_currentTime),
+                          ),
+                          const SizedBox(width: 8),
+                          FutureBuilder<_WeatherSnapshot>(
+                            future: _weatherFuture,
+                            builder: (context, snapshot) {
+                              final weather = snapshot.data;
+                              final label = weather == null
+                                  ? 'Weather'
+                                  : '${weather.temperatureC.toStringAsFixed(0)}°C · ${weather.weatherLabel}';
+
+                              return _buildTopBadge(
+                                icon: weather?.weatherIcon ?? Icons.wb_sunny_rounded,
+                                label: label,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: textColor.withOpacity(0.8),
-                    fontSize: 13,
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, color: textColor, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.8),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    InkWell(
+                      onTap: _dismissApprovedVerificationBanner,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: textColor, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.8),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          if (status == 'approved')
-            InkWell(
-              onTap: _dismissApprovedVerificationBanner,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.close,
-                  size: 18,
-                  color: textColor,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.apartment_outlined, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'No Lounges Yet',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Add your first lounge to start receiving bookings',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await Navigator.pushNamed(context, '/add-lounge');
-              if (!mounted) return;
-              await _loadMyLounges();
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add First Lounge'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoungeCard(Lounge lounge) {
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => LoungeDetailsPage(lounge: lounge),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          children: [
-            // Lounge Image or Placeholder
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-                image: lounge.primaryPhoto != null
-                    ? DecorationImage(
-                        image: NetworkImage(lounge.primaryPhoto!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: lounge.primaryPhoto == null
-                  ? Icon(Icons.apartment, color: Colors.grey.shade400, size: 32)
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            // Lounge Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          lounge.loungeName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _buildStatusChip(lounge.status),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 14,
-                        color: Colors.grey.shade500,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          lounge.address,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildInfoChip(Icons.people, '${lounge.capacity ?? 0}'),
-                      const SizedBox(width: 8),
-                      if (lounge.price1Hour != null)
-                        _buildInfoChip(
-                          Icons.currency_rupee,
-                          'LKR ${lounge.price1Hour}/hr',
-                        ),
-                      const Spacer(),
-                      if (lounge.amenities != null &&
-                          lounge.amenities!.isNotEmpty)
-                        Row(
-                          children: lounge.amenities!
-                              .take(3)
-                              .map(
-                                (a) => Padding(
-                                  padding: const EdgeInsets.only(left: 4),
-                                  child: Icon(
-                                    LoungeAmenities.icons[a] ??
-                                        Icons.check_circle,
-                                    size: 16,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color bgColor;
-    Color textColor;
-    String label;
-
-    switch (status) {
-      case 'active':
-        bgColor = const Color(0xFFE8F5E9);
-        textColor = const Color(0xFF2E7D32);
-        label = 'Active';
-        break;
-      case 'pending':
-        bgColor = const Color(0xFFFFF3E0);
-        textColor = const Color(0xFFF57C00);
-        label = 'Pending';
-        break;
-      case 'inactive':
-        bgColor = Colors.grey.shade100;
-        textColor = Colors.grey.shade600;
-        label = 'Inactive';
-        break;
-      case 'suspended':
-        bgColor = Colors.red.shade50;
-        textColor = Colors.red.shade700;
-        label = 'Suspended';
-        break;
-      default:
-        bgColor = Colors.grey.shade100;
-        textColor = Colors.grey.shade600;
-        label = status;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: Colors.grey.shade600),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-          ),
-        ],
-      ),
     );
   }
 
@@ -873,4 +1441,50 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
       ),
     );
   }
+}
+
+class _CurrencyRateItem {
+  final String code;
+  final String name;
+  final IconData icon;
+  final double lkrValue;
+  final String subtitle;
+
+  const _CurrencyRateItem({
+    required this.code,
+    required this.name,
+    required this.icon,
+    required this.lkrValue,
+    required this.subtitle,
+  });
+}
+
+class _CurrencyRatesData {
+  final bool isLive;
+  final DateTime? lastUpdated;
+  final List<_CurrencyRateItem> items;
+
+  const _CurrencyRatesData({
+    required this.isLive,
+    required this.lastUpdated,
+    required this.items,
+  });
+}
+
+class _WeatherSnapshot {
+  final bool isLive;
+  final DateTime? lastUpdated;
+  final String locationName;
+  final double temperatureC;
+  final String weatherLabel;
+  final IconData weatherIcon;
+
+  const _WeatherSnapshot({
+    required this.isLive,
+    required this.lastUpdated,
+    required this.locationName,
+    required this.temperatureC,
+    required this.weatherLabel,
+    required this.weatherIcon,
+  });
 }

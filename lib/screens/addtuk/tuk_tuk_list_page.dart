@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../config/theme_config.dart';
 import '../../presentation/providers/driver_provider.dart';
 
@@ -124,15 +126,15 @@ class _TukTukListPageState extends State<TukTukListPage> {
             itemCount: drivers.length,
             itemBuilder: (context, index) {
               final driver = drivers[index];
-              return TukTukCard(
-                driverId: driver.id,
-                bookingId: widget.bookingId,
-                loungeId: widget.loungeId,
-                guestName: widget.guestName,
-                guestContact: widget.guestContact,
-                name: driver.fullName,
-                vehicleNo: driver.vehicleNumber,
-                phone: driver.contactNumber,
+              return Column(
+                children: [
+                  TukTukCard(
+                    name: driver.fullName,
+                    vehicleNo: driver.vehicleNumber,
+                    phone: driver.contactNumber,
+                  ),
+                  if (index < drivers.length - 1) const SizedBox(height: 12),
+                ],
               );
             },
           );
@@ -143,22 +145,12 @@ class _TukTukListPageState extends State<TukTukListPage> {
 }
 
 class TukTukCard extends StatefulWidget {
-  final String driverId;
-  final String? bookingId;
-  final String? loungeId;
-  final String? guestName;
-  final String? guestContact;
   final String name;
   final String vehicleNo;
   final String phone;
 
   const TukTukCard({
     super.key,
-    required this.driverId,
-    this.bookingId,
-    this.loungeId,
-    this.guestName,
-    this.guestContact,
     required this.name,
     required this.vehicleNo,
     required this.phone,
@@ -169,207 +161,6 @@ class TukTukCard extends StatefulWidget {
 }
 
 class _TukTukCardState extends State<TukTukCard> {
-  bool _isAssigning = false;
-
-  Future<void> _assignDriver() async {
-    if (widget.bookingId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Booking ID is required to assign a driver'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-      return;
-    }
-
-    if (widget.loungeId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Lounge ID is required to assign a driver'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-      return;
-    }
-
-    if (widget.guestName == null || widget.guestName!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Guest name is required to assign a driver'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-      return;
-    }
-
-    if (widget.guestContact == null || widget.guestContact!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Guest contact is required to assign a driver'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isAssigning = true);
-
-    try {
-      final driverProvider = context.read<DriverProvider>();
-
-      final success = await driverProvider.assignDriverToBooking(
-        bookingId: widget.bookingId!,
-        driverId: widget.driverId,
-        loungeId: widget.loungeId!,
-        guestName: widget.guestName!,
-        guestContact: widget.guestContact!,
-        driverContact: widget.phone,
-      );
-
-      if (!mounted) return;
-
-      if (success) {
-        final assignment = driverProvider.lastAssignment;
-
-        if (!mounted) return;
-
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext dialogContext) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Success Icon
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Icon(
-                        Icons.check_circle,
-                        color: Colors.green.shade600,
-                        size: 48,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Title
-                    const Text(
-                      'Driver Assigned Successfully!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Details
-                    if (assignment != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          children: [
-                            _buildDetailRow(
-                              'Driver: ',
-                              widget.name,
-                            ),
-                            const SizedBox(height: 8),
-                            _buildDetailRow(
-                              'Vehicle: ',
-                              widget.vehicleNo,
-                            ),
-                            const SizedBox(height: 8),
-                            _buildDetailRow(
-                              'Status: ',
-                              assignment.status ?? 'Pending',
-                            ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 24),
-
-                    // OK Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(dialogContext);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text(
-                          'OK',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-
-        // Navigate back after dialog closes
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              driverProvider.error ?? 'Failed to assign driver',
-              style: const TextStyle(fontSize: 13),
-            ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isAssigning = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -388,7 +179,6 @@ class _TukTukCardState extends State<TukTukCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// Top Row (Avatar + Name)
           Row(
             children: [
               CircleAvatar(
@@ -429,10 +219,7 @@ class _TukTukCardState extends State<TukTukCard> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          /// Vehicle Number
           Row(
             children: [
               const Icon(Icons.directions_car,
@@ -442,23 +229,25 @@ class _TukTukCardState extends State<TukTukCard> {
                   style: const TextStyle(color: AppColors.textPrimary)),
             ],
           ),
-
           const SizedBox(height: 8),
-
-          /// Phone + Call Button
           Row(
             children: [
-              const Icon(Icons.phone, size: 18, color: AppColors.success),
+              const Icon(Icons.phone, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(widget.phone,
                   style: const TextStyle(color: AppColors.textPrimary)),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () async {
+                  final phoneUrl = Uri(scheme: 'tel', path: widget.phone);
+                  if (await canLaunchUrl(phoneUrl)) {
+                    await launchUrl(phoneUrl);
+                  }
+                },
                 icon: const Icon(Icons.call, size: 16),
                 label: const Text('Call'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.textLight,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
@@ -467,67 +256,8 @@ class _TukTukCardState extends State<TukTukCard> {
               ),
             ],
           ),
-
-          const SizedBox(height: 14),
-
-          /// Assign Driver Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: widget.bookingId != null && !_isAssigning
-                  ? _assignDriver
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.bookingId != null && !_isAssigning
-                    ? AppColors.success
-                    : Colors.grey.shade400,
-                foregroundColor: AppColors.textLight,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isAssigning
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(AppColors.textLight),
-                      ),
-                    )
-                  : const Text('Assign Driver',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 }
