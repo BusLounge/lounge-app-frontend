@@ -243,37 +243,65 @@ class LoungeOwnerProvider with ChangeNotifier {
     reset();
   }
 
-    /// Create bank details for lounge owner
-    Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
-      required String bankName,
-      required String branchName,
-      required String branchCode,
-      required String acType,
-      required String acHolderName,
-      required String acNumber,
-      required String? swiftCode,
-    }) async {
-      return await loungeOwnerRepository.createBankDetails(
-        bankName: bankName,
-        branchName: branchName,
-        branchCode: branchCode,
-        acType: acType,
-        acHolderName: acHolderName,
-        acNumber: acNumber,
-        swiftCode: swiftCode,
-      );
-    }
+  /// Create bank details for lounge owner
+  Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  }) async {
+    return await loungeOwnerRepository.createBankDetails(
+      bankName: bankName,
+      branchName: branchName,
+      branchCode: branchCode,
+      acType: acType,
+      acHolderName: acHolderName,
+      acNumber: acNumber,
+      swiftCode: swiftCode,
+    );
+  }
 
-    /// Create bank link for lounge owner
-    Future<Either<Failure, Map<String, dynamic>>> createBankLink({
-      required String bankDetailsId,
-      String? loungeId,
-    }) async {
-      return await loungeOwnerRepository.createBankLink(
-        bankDetailsId: bankDetailsId,
-        loungeId: loungeId,
-      );
-    }
+  /// Create bank link for lounge owner
+  Future<Either<Failure, Map<String, dynamic>>> createBankLink({
+    required String bankDetailsId,
+    String? loungeId,
+  }) async {
+    return await loungeOwnerRepository.createBankLink(
+      bankDetailsId: bankDetailsId,
+      loungeId: loungeId,
+    );
+  }
+
+  /// List bank links for current lounge owner
+  Future<Either<Failure, List<Map<String, dynamic>>>> getBankLinks() async {
+    return await loungeOwnerRepository.getBankLinks();
+  }
+
+  /// Update bank details
+  Future<Either<Failure, void>> updateBankDetails({
+    required String id,
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  }) async {
+    return await loungeOwnerRepository.updateBankDetails(
+      id: id,
+      bankName: bankName,
+      branchName: branchName,
+      branchCode: branchCode,
+      acType: acType,
+      acHolderName: acHolderName,
+      acNumber: acNumber,
+      swiftCode: swiftCode,
+    );
+  }
 
   /// Clear error message
   void clearError() {

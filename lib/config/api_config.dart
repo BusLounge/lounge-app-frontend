@@ -4,24 +4,24 @@ class ApiConfig {
   // ============================================
   // BACKEND CONFIGURATION
   // ============================================
-    // Default to the local backend and allow overrides with
-    // --dart-define=LOCAL_BACKEND_URL=...
-    static String get _defaultBackendUrl {
-        if (kIsWeb) {
-            return 'http://localhost:8080';
-        }
-
-        switch (defaultTargetPlatform) {
-            case TargetPlatform.android:
-                return 'http://10.0.2.2:8080';
-            case TargetPlatform.iOS:
-            case TargetPlatform.macOS:
-            case TargetPlatform.linux:
-            case TargetPlatform.windows:
-            case TargetPlatform.fuchsia:
-                return 'http://localhost:8080';
-        }
+  // Default to the local backend and allow overrides with
+  // --dart-define=LOCAL_BACKEND_URL=...
+  static String get _defaultBackendUrl {
+    if (kIsWeb) {
+      return 'http://localhost:8080';
     }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'http://10.0.2.2:8080';
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+      case TargetPlatform.fuchsia:
+        return 'http://localhost:8080';
+    }
+  }
 
   static const String _localBackendUrlOverride =
       String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');

@@ -157,49 +157,91 @@ class LoungeOwnerRepositoryImpl implements LoungeOwnerRepository {
     }
   }
 
-    @override
-    Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
-      required String bankName,
-      required String branchName,
-      required String branchCode,
-      required String acType,
-      required String acHolderName,
-      required String acNumber,
-      required String? swiftCode,
-    }) async {
-      try {
-        final result = await remoteDataSource.createBankDetails(
-          bankName: bankName,
-          branchName: branchName,
-          branchCode: branchCode,
-          acType: acType,
-          acHolderName: acHolderName,
-          acNumber: acNumber,
-          swiftCode: swiftCode,
-        );
-        return Right(result);
-      } on ServerException catch (e) {
-        return Left(ServerFailure(e.message));
-      } catch (e) {
-        return Left(ServerFailure('Unexpected error: ${e.toString()}'));
-      }
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  }) async {
+    try {
+      final result = await remoteDataSource.createBankDetails(
+        bankName: bankName,
+        branchName: branchName,
+        branchCode: branchCode,
+        acType: acType,
+        acHolderName: acHolderName,
+        acNumber: acNumber,
+        swiftCode: swiftCode,
+      );
+      return Right(result);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: ${e.toString()}'));
     }
+  }
 
-    @override
-    Future<Either<Failure, Map<String, dynamic>>> createBankLink({
-      required String bankDetailsId,
-      String? loungeId,
-    }) async {
-      try {
-        final result = await remoteDataSource.createBankLink(
-          bankDetailsId: bankDetailsId,
-          loungeId: loungeId,
-        );
-        return Right(result);
-      } on ServerException catch (e) {
-        return Left(ServerFailure(e.message));
-      } catch (e) {
-        return Left(ServerFailure('Unexpected error: ${e.toString()}'));
-      }
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> createBankLink({
+    required String bankDetailsId,
+    String? loungeId,
+  }) async {
+    try {
+      final result = await remoteDataSource.createBankLink(
+        bankDetailsId: bankDetailsId,
+        loungeId: loungeId,
+      );
+      return Right(result);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: ${e.toString()}'));
     }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getBankLinks() async {
+    try {
+      final result = await remoteDataSource.getBankLinks();
+      return Right(result);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: ${e.toString()}'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateBankDetails({
+    required String id,
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  }) async {
+    try {
+      await remoteDataSource.updateBankDetails(
+        id: id,
+        bankName: bankName,
+        branchName: branchName,
+        branchCode: branchCode,
+        acType: acType,
+        acHolderName: acHolderName,
+        acNumber: acNumber,
+        swiftCode: swiftCode,
+      );
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: ${e.toString()}'));
+    }
+  }
 }

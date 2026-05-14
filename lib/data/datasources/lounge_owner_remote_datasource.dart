@@ -819,7 +819,8 @@ class LoungeOwnerRemoteDataSource {
       }
 
       print('✅ Bank details created successfully');
-      final bankDetails = response.data['bank_details'] as Map<String, dynamic>?;
+      final bankDetails =
+          response.data['bank_details'] as Map<String, dynamic>?;
       return bankDetails ?? response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       print('❌ DioException in createBankDetails:');
@@ -870,6 +871,82 @@ class LoungeOwnerRemoteDataSource {
       final errorMessage =
           e.response?.data?['message'] ?? e.message ?? 'Unknown error';
       throw ServerException('Create bank link failed: $errorMessage');
+    } catch (e) {
+      print('❌ Error: $e');
+      throw ServerException(e.toString());
+    }
+  }
+
+  /// List bank links for current lounge owner
+  /// GET /api/v1/lounge-owner/bank-links
+  Future<List<Map<String, dynamic>>> getBankLinks() async {
+    try {
+      final response = await apiClient.get('/api/v1/lounge-owner/bank-links');
+
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to load bank links');
+      }
+
+      final data = response.data;
+      final links = data['bank_links'] as List<dynamic>? ?? [];
+      return links
+          .whereType<Map<String, dynamic>>()
+          .map((item) => item)
+          .toList();
+    } on DioException catch (e) {
+      print('❌ DioException in getBankLinks:');
+      print('   Status Code: ${e.response?.statusCode}');
+      print('   Response Data: ${e.response?.data}');
+      final errorMessage =
+          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      throw ServerException('Get bank links failed: $errorMessage');
+    } catch (e) {
+      print('❌ Error: $e');
+      throw ServerException(e.toString());
+    }
+  }
+
+  /// Update bank details
+  /// PUT /api/v1/lounge-owner/bank-details/:id
+  Future<void> updateBankDetails({
+    required String id,
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  }) async {
+    try {
+      final data = {
+        'bank_name': bankName,
+        'branch_name': branchName,
+        'branch_code': branchCode,
+        'ac_type': acType,
+        'ac_holder_name': acHolderName,
+        'ac_number': acNumber,
+      };
+
+      if (swiftCode != null && swiftCode.isNotEmpty) {
+        data['swift_code'] = swiftCode;
+      }
+
+      final response = await apiClient.put(
+        '/api/v1/lounge-owner/bank-details/$id',
+        data: data,
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to update bank details');
+      }
+    } on DioException catch (e) {
+      print('❌ DioException in updateBankDetails:');
+      print('   Status Code: ${e.response?.statusCode}');
+      print('   Response Data: ${e.response?.data}');
+      final errorMessage =
+          e.response?.data?['message'] ?? e.message ?? 'Unknown error';
+      throw ServerException('Update bank details failed: $errorMessage');
     } catch (e) {
       print('❌ Error: $e');
       throw ServerException(e.toString());

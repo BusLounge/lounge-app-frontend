@@ -18,6 +18,9 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late LoungeOwnerRemoteDataSource _loungeOwnerRemoteDataSource;
   final Map<String, String> _districtNamesById = {};
+  List<Map<String, dynamic>> _bankLinks = [];
+  bool _bankLoading = false;
+  String? _bankError;
 
   @override
   void initState() {
@@ -31,6 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         listen: false,
       ).getLoungeOwnerProfile();
       _loadDistricts();
+      _loadBankLinks();
     });
   }
 
@@ -54,6 +58,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {
       // Keep profile usable even when district lookup fails.
     }
+  }
+
+  Future<void> _loadBankLinks() async {
+    if (!mounted) return;
+    setState(() {
+      _bankLoading = true;
+      _bankError = null;
+    });
+
+    final provider = Provider.of<LoungeOwnerProvider>(context, listen: false);
+    final result = await provider.getBankLinks();
+
+    result.fold(
+      (failure) {
+        if (!mounted) return;
+        setState(() {
+          _bankError = failure.message;
+          _bankLinks = [];
+          _bankLoading = false;
+        });
+      },
+      (links) {
+        if (!mounted) return;
+        setState(() {
+          _bankLinks = links;
+          _bankLoading = false;
+        });
+      },
+    );
   }
 
   bool _looksLikeUuid(String value) {
@@ -82,6 +115,358 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   bool _hasValue(String? value) => value != null && value.trim().isNotEmpty;
+
+  String _maskSensitive(String? value) {
+    if (value == null) return 'Not provided';
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Not provided';
+    if (trimmed.length <= 4) {
+      return '****';
+    }
+    final lastFour = trimmed.substring(trimmed.length - 4);
+    return '****$lastFour';
+  }
+
+  Map<String, dynamic>? _extractBankDetails() {
+    if (_bankLinks.isEmpty) return null;
+    final entry = _bankLinks.first;
+    final details = entry['bank_details'];
+    if (details is Map<String, dynamic>) {
+      return details;
+    }
+    return null;
+  }
+
+  Future<void> _showEditBankDetailsDialog(Map<String, dynamic> details) async {
+    final bankNameController =
+        TextEditingController(text: details['bank_name']?.toString() ?? '');
+    final branchNameController =
+        TextEditingController(text: details['branch_name']?.toString() ?? '');
+    final branchCodeController =
+        TextEditingController(text: details['branch_code']?.toString() ?? '');
+    final acTypeController =
+        TextEditingController(text: details['ac_type']?.toString() ?? '');
+    final holderController = TextEditingController(
+        text: details['ac_holder_name']?.toString() ?? '');
+    final numberController =
+        TextEditingController(text: details['ac_number']?.toString() ?? '');
+    final swiftController =
+        TextEditingController(text: details['swift_code']?.toString() ?? '');
+
+    final formKey = GlobalKey<FormState>();
+    final provider = Provider.of<LoungeOwnerProvider>(context, listen: false);
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Bank Details'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: bankNameController,
+                    decoration: const InputDecoration(labelText: 'Bank Name'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Bank name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: branchNameController,
+                    decoration: const InputDecoration(labelText: 'Branch Name'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Branch name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: branchCodeController,
+                    decoration: const InputDecoration(labelText: 'Branch Code'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Branch code is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: acTypeController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Type'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account type is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: holderController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Holder'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account holder is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: numberController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Number'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account number is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: swiftController,
+                    decoration: const InputDecoration(
+                        labelText: 'SWIFT Code (Optional)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldSave != true) {
+      return;
+    }
+
+    final bankId = details['id']?.toString();
+    if (bankId == null || bankId.isEmpty) {
+      return;
+    }
+
+    final result = await provider.updateBankDetails(
+      id: bankId,
+      bankName: bankNameController.text.trim(),
+      branchName: branchNameController.text.trim(),
+      branchCode: branchCodeController.text.trim(),
+      acType: acTypeController.text.trim(),
+      acHolderName: holderController.text.trim(),
+      acNumber: numberController.text.trim(),
+      swiftCode: swiftController.text.trim().isEmpty
+          ? null
+          : swiftController.text.trim(),
+    );
+
+    result.fold(
+      (failure) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(failure.message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      },
+      (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Bank details updated successfully.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        _loadBankLinks();
+      },
+    );
+  }
+
+  Future<void> _showAddBankDetailsDialog() async {
+    final bankNameController = TextEditingController();
+    final branchNameController = TextEditingController();
+    final branchCodeController = TextEditingController();
+    final acTypeController = TextEditingController();
+    final holderController = TextEditingController();
+    final numberController = TextEditingController();
+    final swiftController = TextEditingController();
+
+    final formKey = GlobalKey<FormState>();
+    final provider = Provider.of<LoungeOwnerProvider>(context, listen: false);
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Bank Details'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: bankNameController,
+                    decoration: const InputDecoration(labelText: 'Bank Name'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Bank name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: branchNameController,
+                    decoration: const InputDecoration(labelText: 'Branch Name'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Branch name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: branchCodeController,
+                    decoration: const InputDecoration(labelText: 'Branch Code'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Branch code is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: acTypeController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Type'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account type is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: holderController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Holder'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account holder is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: numberController,
+                    decoration:
+                        const InputDecoration(labelText: 'Account Number'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Account number is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: swiftController,
+                    decoration: const InputDecoration(
+                        labelText: 'SWIFT Code (Optional)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldSave != true) {
+      return;
+    }
+
+    final createResult = await provider.createBankDetails(
+      bankName: bankNameController.text.trim(),
+      branchName: branchNameController.text.trim(),
+      branchCode: branchCodeController.text.trim(),
+      acType: acTypeController.text.trim(),
+      acHolderName: holderController.text.trim(),
+      acNumber: numberController.text.trim(),
+      swiftCode: swiftController.text.trim().isEmpty
+          ? null
+          : swiftController.text.trim(),
+    );
+
+    Map<String, dynamic>? created;
+    final createError = createResult.fold(
+      (failure) => failure.message,
+      (data) {
+        created = data;
+        return null;
+      },
+    );
+
+    if (createError != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(createError),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final bankId = created?['id']?.toString();
+    if (bankId == null || bankId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Bank details saved but id missing.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final linkResult =
+        await provider.createBankLink(bankDetailsId: bankId, loungeId: null);
+
+    final linkError = linkResult.fold(
+      (failure) => failure.message,
+      (_) => null,
+    );
+
+    if (linkError != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(linkError),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Bank details added successfully.'),
+        backgroundColor: AppColors.success,
+      ),
+    );
+    _loadBankLinks();
+  }
 
   Future<void> _logout(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -257,6 +642,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _resolveDistrictDisplay(loungeOwner),
                         Icons.location_on,
                       ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  _buildSectionCard(
+                    title: 'Bank Details',
+                    icon: Icons.account_balance,
+                    children: [
+                      if (_bankLoading)
+                        const Text('Loading bank details...')
+                      else if (_bankError != null)
+                        Text(
+                          _bankError!,
+                          style: const TextStyle(color: AppColors.error),
+                        )
+                      else if (_extractBankDetails() == null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('No bank details on file.'),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: _showAddBankDetailsDialog,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add Bank Details'),
+                              ),
+                            ),
+                          ],
+                        )
+                      else ...[
+                        _buildInfoRow(
+                          'Bank Name',
+                          _extractBankDetails()!['bank_name']?.toString() ??
+                              'Not provided',
+                          Icons.account_balance,
+                        ),
+                        _buildInfoRow(
+                          'Branch Name',
+                          _extractBankDetails()!['branch_name']?.toString() ??
+                              'Not provided',
+                          Icons.location_city,
+                        ),
+                        _buildInfoRow(
+                          'Branch Code',
+                          _extractBankDetails()!['branch_code']?.toString() ??
+                              'Not provided',
+                          Icons.account_tree,
+                        ),
+                        _buildInfoRow(
+                          'Account Type',
+                          _extractBankDetails()!['ac_type']?.toString() ??
+                              'Not provided',
+                          Icons.category,
+                        ),
+                        _buildInfoRow(
+                          'Account Holder',
+                          _extractBankDetails()!['ac_holder_name']
+                                  ?.toString() ??
+                              'Not provided',
+                          Icons.person,
+                        ),
+                        _buildInfoRow(
+                          'Account Number',
+                          _maskSensitive(
+                            _extractBankDetails()!['ac_number']?.toString(),
+                          ),
+                          Icons.numbers,
+                        ),
+                        _buildInfoRow(
+                          'SWIFT Code',
+                          _maskSensitive(
+                            _extractBankDetails()!['swift_code']?.toString(),
+                          ),
+                          Icons.qr_code,
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              final details = _extractBankDetails();
+                              if (details != null) {
+                                _showEditBankDetailsDialog(details);
+                              }
+                            },
+                            icon: const Icon(Icons.edit),
+                            label: const Text('Edit'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
 

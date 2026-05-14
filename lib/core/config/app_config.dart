@@ -1,38 +1,38 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-    // API Configuration - local backend by default.
+  // API Configuration - local backend by default.
   // Override with --dart-define=LOCAL_BACKEND_URL=...
-    static String get _defaultBackendUrl {
-        if (kIsWeb) {
-            return 'http://localhost:8080';
-        }
-
-        switch (defaultTargetPlatform) {
-            case TargetPlatform.android:
-                return 'http://10.0.2.2:8080';
-            case TargetPlatform.iOS:
-            case TargetPlatform.macOS:
-            case TargetPlatform.linux:
-            case TargetPlatform.windows:
-            case TargetPlatform.fuchsia:
-                return 'http://localhost:8080';
-        }
+  static String get _defaultBackendUrl {
+    if (kIsWeb) {
+      return 'http://localhost:8080';
     }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'http://10.0.2.2:8080';
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+      case TargetPlatform.fuchsia:
+        return 'http://localhost:8080';
+    }
+  }
 
   static const String _localBackendUrlOverride =
       String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
   static const String _webSocketUrlOverride =
       String.fromEnvironment('WEBSOCKET_URL', defaultValue: '');
-    static const String _webSocketEnabledOverride =
-            String.fromEnvironment('WEBSOCKET_ENABLED', defaultValue: 'false');
+  static const String _webSocketEnabledOverride =
+      String.fromEnvironment('WEBSOCKET_ENABLED', defaultValue: 'false');
   static const String _webSocketPath =
       String.fromEnvironment('WEBSOCKET_PATH', defaultValue: '/ws');
 
-    static bool get webSocketEnabled {
-        final value = _webSocketEnabledOverride.toLowerCase().trim();
-        return value == '1' || value == 'true' || value == 'yes';
-    }
+  static bool get webSocketEnabled {
+    final value = _webSocketEnabledOverride.toLowerCase().trim();
+    return value == '1' || value == 'true' || value == 'yes';
+  }
 
   static String get baseUrl => _localBackendUrlOverride.isNotEmpty
       ? _localBackendUrlOverride

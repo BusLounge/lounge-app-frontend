@@ -46,20 +46,35 @@ abstract class LoungeOwnerRepository {
     String? districtId,
   });
 
-    /// Create bank details for lounge owner
-    Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
-      required String bankName,
-      required String branchName,
-      required String branchCode,
-      required String acType,
-      required String acHolderName,
-      required String acNumber,
-      required String? swiftCode,
-    });
+  /// Create bank details for lounge owner
+  Future<Either<Failure, Map<String, dynamic>>> createBankDetails({
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  });
 
-    /// Create bank link for lounge owner
-    Future<Either<Failure, Map<String, dynamic>>> createBankLink({
-      required String bankDetailsId,
-      String? loungeId,
-    });
+  /// Create bank link for lounge owner
+  Future<Either<Failure, Map<String, dynamic>>> createBankLink({
+    required String bankDetailsId,
+    String? loungeId,
+  });
+
+  /// List bank links for current lounge owner
+  Future<Either<Failure, List<Map<String, dynamic>>>> getBankLinks();
+
+  /// Update bank details
+  Future<Either<Failure, void>> updateBankDetails({
+    required String id,
+    required String bankName,
+    required String branchName,
+    required String branchCode,
+    required String acType,
+    required String acHolderName,
+    required String acNumber,
+    required String? swiftCode,
+  });
 }
