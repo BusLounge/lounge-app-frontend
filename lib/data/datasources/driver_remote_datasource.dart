@@ -40,6 +40,13 @@ abstract class DriverRemoteDataSource {
     required String guestContact,
     required String driverContact,
   });
+
+  /// Check if a driver is already assigned for a booking
+  /// GET /api/v1/lounge-booking-driver-assignments/check/{booking_id}
+  /// Returns `{ assigned: bool, assignment: { ... } | null }`
+  Future<LoungeBookingDriverAssignmentModel?> checkDriverAssignment({
+    required String bookingId,
+  });
 }
 
 class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
@@ -318,6 +325,35 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
     } catch (e) {
       print('❌ [ASSIGNMENT API] Unexpected error: $e');
       rethrow;
+    }
+  }
+
+  @override
+  Future<LoungeBookingDriverAssignmentModel?> checkDriverAssignment({
+    required String bookingId,
+  }) async {
+    try {
+      final response = await _dio
+          .get('/api/v1/lounge-booking-driver-assignments/check/$bookingId');
+
+      if (response.data == null) return null;
+
+      final data = response.data as Map<String, dynamic>;
+      final assigned = data['assigned'] as bool? ?? false;
+      if (!assigned) return null;
+
+      final assignmentData = data['assignment'];
+      if (assignmentData == null) return null;
+
+      return LoungeBookingDriverAssignmentModel.fromJson(
+          assignmentData as Map<String, dynamic>);
+    } on DioException catch (e) {
+      print('❌ [ASSIGNMENT CHECK] DioException: ${e.message}');
+      // Treat as not assigned on error by returning null
+      return null;
+    } catch (e) {
+      print('❌ [ASSIGNMENT CHECK] Unexpected error: $e');
+      return null;
     }
   }
 

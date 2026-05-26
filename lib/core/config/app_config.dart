@@ -1,27 +1,14 @@
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
-  // API Configuration - local backend by default.
-  // Override with --dart-define=LOCAL_BACKEND_URL=...
+  // API configuration - local backend by default.
+  // Override with --dart-define=BACKEND_BASE_URL=...
   static String get _defaultBackendUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8080';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:8080';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-        return 'http://localhost:8080';
-    }
+    return 'http://10.0.2.2:8080';
   }
 
-  static const String _localBackendUrlOverride =
-      String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
+  static const String _backendUrlOverride =
+      String.fromEnvironment('BACKEND_BASE_URL', defaultValue: '');
+  static const String _legacyChoreoBackendUrlOverride =
+      String.fromEnvironment('CHOREO_BASE_URL', defaultValue: '');
   static const String _webSocketUrlOverride =
       String.fromEnvironment('WEBSOCKET_URL', defaultValue: '');
   static const String _webSocketEnabledOverride =
@@ -34,9 +21,15 @@ class AppConfig {
     return value == '1' || value == 'true' || value == 'yes';
   }
 
-  static String get baseUrl => _localBackendUrlOverride.isNotEmpty
-      ? _localBackendUrlOverride
-      : _defaultBackendUrl;
+  static String get baseUrl {
+    if (_backendUrlOverride.isNotEmpty) {
+      return _backendUrlOverride;
+    }
+    if (_legacyChoreoBackendUrlOverride.isNotEmpty) {
+      return _legacyChoreoBackendUrlOverride;
+    }
+    return _defaultBackendUrl;
+  }
 
   static String get webSocketUrl {
     if (_webSocketUrlOverride.isNotEmpty) {

@@ -17,6 +17,7 @@ class DriverProvider extends ChangeNotifier {
   List<Driver> _driverList = [];
   Driver? _selectedDriver;
   LoungeBookingDriverAssignmentModel? _lastAssignment;
+  LoungeBookingDriverAssignmentModel? _existingAssignment;
 
   // Getters
   bool get isLoading => _isLoading;
@@ -24,6 +25,8 @@ class DriverProvider extends ChangeNotifier {
   List<Driver> get driverList => _driverList;
   Driver? get selectedDriver => _selectedDriver;
   LoungeBookingDriverAssignmentModel? get lastAssignment => _lastAssignment;
+  LoungeBookingDriverAssignmentModel? get existingAssignment =>
+      _existingAssignment;
 
   /// Add driver to lounge
   Future<bool> addDriver({
@@ -151,6 +154,18 @@ class DriverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Always re-check server state before assigning to avoid stale UI data.
+      final serverExistingAssignment =
+          await remoteDataSource.checkDriverAssignment(
+        bookingId: bookingId,
+      );
+      if (serverExistingAssignment != null) {
+        _existingAssignment = serverExistingAssignment;
+        _error = 'A driver is already assigned to this booking';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
       final assignment = await remoteDataSource.assignDriverToBooking(
         bookingId: bookingId,
         driverId: driverId,
@@ -161,6 +176,7 @@ class DriverProvider extends ChangeNotifier {
       );
 
       _lastAssignment = assignment;
+      _existingAssignment = assignment;
       _isLoading = false;
       notifyListeners();
       return true;
@@ -172,6 +188,23 @@ class DriverProvider extends ChangeNotifier {
     } catch (e) {
       _error = 'An unexpected error occurred';
       _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Check if a driver is already assigned for a booking
+  Future<bool> checkDriverAssigned({required String bookingId}) async {
+    _error = null;
+    try {
+      final assignment = await remoteDataSource.checkDriverAssignment(
+        bookingId: bookingId,
+      );
+      _existingAssignment = assignment;
+      notifyListeners();
+      return assignment != null;
+    } catch (_) {
+      _existingAssignment = null;
       notifyListeners();
       return false;
     }
@@ -189,6 +222,8 @@ class DriverProvider extends ChangeNotifier {
     _error = null;
     _driverList = [];
     _selectedDriver = null;
+    _lastAssignment = null;
+    _existingAssignment = null;
     notifyListeners();
   }
 }

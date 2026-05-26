@@ -22,6 +22,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _bankLoading = false;
   String? _bankError;
 
+  static const List<String> _sriLankanBanks = [
+    'Amana Bank',
+    'Bank of Ceylon',
+    'Bank of China',
+    'Cargills Bank',
+    'Citibank, N.A.',
+    'Commercial Bank of Ceylon',
+    'Deutsche Bank',
+    'DFCC Bank',
+    'Habib Bank',
+    'Hatton National Bank',
+    'HDFC Bank of Sri Lanka',
+    'Hong Kong and Shanghai Banking Corporation (HSBC)',
+    'Indian Bank',
+    'Indian Overseas Bank',
+    'MCB Bank',
+    'National Development Bank',
+    'National Savings Bank',
+    'Nations Trust Bank',
+    'Pan Asia Bank',
+    'People\'s Bank',
+    'Public Bank Berhad',
+    'Regional Development Bank',
+    'Sampath Bank',
+    'Sanasa Development Bank',
+    'Seylan Bank',
+    'Sri Lanka Savings Bank',
+    'Standard Chartered Bank',
+    'State Bank of India',
+    'State Mortgage and Investment Bank',
+    'Union Bank of Colombo',
+  ];
+
+  static const List<String> _accountTypes = [
+    'Savings Account',
+    'Current Account',
+    'Business Account',
+    'Joint Account',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -155,6 +195,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final formKey = GlobalKey<FormState>();
     final provider = Provider.of<LoungeOwnerProvider>(context, listen: false);
+    String? selectedBankName = bankNameController.text.trim().isEmpty
+        ? null
+        : bankNameController.text.trim();
+    String? selectedAccountType = acTypeController.text.trim().isEmpty
+        ? null
+        : acTypeController.text.trim();
+
+    final bankOptions = <String>[
+      if (selectedBankName != null &&
+          !_sriLankanBanks.contains(selectedBankName))
+        selectedBankName,
+      ..._sriLankanBanks,
+    ];
+    final accountTypeOptions = <String>[
+      if (selectedAccountType != null &&
+          !_accountTypes.contains(selectedAccountType))
+        selectedAccountType,
+      ..._accountTypes,
+    ];
 
     final shouldSave = await showDialog<bool>(
       context: context,
@@ -162,69 +221,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           title: const Text('Edit Bank Details'),
           content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: bankNameController,
-                    decoration: const InputDecoration(labelText: 'Bank Name'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Bank name is required'
-                        : null,
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: selectedBankName,
+                        decoration:
+                            const InputDecoration(labelText: 'Bank Name'),
+                        isExpanded: true,
+                        items: bankOptions
+                            .map(
+                              (bank) => DropdownMenuItem<String>(
+                                value: bank,
+                                child:
+                                    Text(bank, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedBankName = value;
+                            bankNameController.text = value ?? '';
+                          });
+                        },
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Bank name is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: branchNameController,
+                        decoration:
+                            const InputDecoration(labelText: 'Branch Name'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Branch name is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: branchCodeController,
+                        decoration:
+                            const InputDecoration(labelText: 'Branch Code'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Branch code is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedAccountType,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Type'),
+                        isExpanded: true,
+                        items: accountTypeOptions
+                            .map(
+                              (type) => DropdownMenuItem<String>(
+                                value: type,
+                                child:
+                                    Text(type, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedAccountType = value;
+                            acTypeController.text = value ?? '';
+                          });
+                        },
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account type is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: holderController,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Holder'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account holder is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: numberController,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Number'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account number is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: swiftController,
+                        decoration: const InputDecoration(
+                            labelText: 'SWIFT Code (Optional)'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: branchNameController,
-                    decoration: const InputDecoration(labelText: 'Branch Name'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Branch name is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: branchCodeController,
-                    decoration: const InputDecoration(labelText: 'Branch Code'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Branch code is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: acTypeController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Type'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account type is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: holderController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Holder'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account holder is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: numberController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Number'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account number is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: swiftController,
-                    decoration: const InputDecoration(
-                        labelText: 'SWIFT Code (Optional)'),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           ),
           actions: [
@@ -301,6 +405,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final formKey = GlobalKey<FormState>();
     final provider = Provider.of<LoungeOwnerProvider>(context, listen: false);
+    String? selectedBankName;
+    String? selectedAccountType;
 
     final shouldSave = await showDialog<bool>(
       context: context,
@@ -308,69 +414,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           title: const Text('Add Bank Details'),
           content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: bankNameController,
-                    decoration: const InputDecoration(labelText: 'Bank Name'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Bank name is required'
-                        : null,
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: selectedBankName,
+                        decoration:
+                            const InputDecoration(labelText: 'Bank Name'),
+                        isExpanded: true,
+                        items: _sriLankanBanks
+                            .map(
+                              (bank) => DropdownMenuItem<String>(
+                                value: bank,
+                                child:
+                                    Text(bank, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedBankName = value;
+                            bankNameController.text = value ?? '';
+                          });
+                        },
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Bank name is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: branchNameController,
+                        decoration:
+                            const InputDecoration(labelText: 'Branch Name'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Branch name is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: branchCodeController,
+                        decoration:
+                            const InputDecoration(labelText: 'Branch Code'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Branch code is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedAccountType,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Type'),
+                        isExpanded: true,
+                        items: _accountTypes
+                            .map(
+                              (type) => DropdownMenuItem<String>(
+                                value: type,
+                                child:
+                                    Text(type, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedAccountType = value;
+                            acTypeController.text = value ?? '';
+                          });
+                        },
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account type is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: holderController,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Holder'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account holder is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: numberController,
+                        decoration:
+                            const InputDecoration(labelText: 'Account Number'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Account number is required'
+                                : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: swiftController,
+                        decoration: const InputDecoration(
+                            labelText: 'SWIFT Code (Optional)'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: branchNameController,
-                    decoration: const InputDecoration(labelText: 'Branch Name'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Branch name is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: branchCodeController,
-                    decoration: const InputDecoration(labelText: 'Branch Code'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Branch code is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: acTypeController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Type'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account type is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: holderController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Holder'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account holder is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: numberController,
-                    decoration:
-                        const InputDecoration(labelText: 'Account Number'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Account number is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: swiftController,
-                    decoration: const InputDecoration(
-                        labelText: 'SWIFT Code (Optional)'),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           ),
           actions: [

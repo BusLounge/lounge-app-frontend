@@ -79,6 +79,38 @@ class _LoungeOwnerRegistrationScreenState
     'Business Account',
     'Joint Account',
   ];
+  static const List<String> _sriLankanBanks = [
+    'Amana Bank',
+    'Bank of Ceylon',
+    'Bank of China',
+    'Cargills Bank',
+    'Citibank, N.A.',
+    'Commercial Bank of Ceylon',
+    'Deutsche Bank',
+    'DFCC Bank',
+    'Habib Bank',
+    'Hatton National Bank',
+    'HDFC Bank of Sri Lanka',
+    'Hong Kong and Shanghai Banking Corporation (HSBC)',
+    'Indian Bank',
+    'Indian Overseas Bank',
+    'MCB Bank',
+    'National Development Bank',
+    'National Savings Bank',
+    'Nations Trust Bank',
+    'Pan Asia Bank',
+    'People\'s Bank',
+    'Public Bank Berhad',
+    'Regional Development Bank',
+    'Sampath Bank',
+    'Sanasa Development Bank',
+    'Seylan Bank',
+    'Sri Lanka Savings Bank',
+    'Standard Chartered Bank',
+    'State Bank of India',
+    'State Mortgage and Investment Bank',
+    'Union Bank of Colombo',
+  ];
 
   // Step 3 fields
   final _loungeNameController = TextEditingController();
@@ -494,8 +526,10 @@ class _LoungeOwnerRegistrationScreenState
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _bankNameController,
+          DropdownButtonFormField<String>(
+            value: _bankNameController.text.trim().isEmpty
+                ? null
+                : _bankNameController.text.trim(),
             decoration: InputDecoration(
               labelText: 'Bank Name *',
               border: OutlineInputBorder(
@@ -503,6 +537,18 @@ class _LoungeOwnerRegistrationScreenState
               ),
               prefixIcon: const Icon(Icons.account_balance),
             ),
+            isExpanded: true,
+            items: _sriLankanBanks.map((bank) {
+              return DropdownMenuItem<String>(
+                value: bank,
+                child: Text(bank, overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _bankNameController.text = value ?? '';
+              });
+            },
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Bank name is required';

@@ -24,7 +24,9 @@ class LoungeBookingDriverAssignmentModel {
       Map<String, dynamic> json) {
     return LoungeBookingDriverAssignmentModel(
       id: json['id'] as String?,
-      bookingId: json['booking_id'] as String? ?? '',
+      bookingId: json['booking_id'] as String? ??
+          json['lounge_booking_id'] as String? ??
+          '',
       driverId: json['driver_id'] as String? ?? '',
       status: json['status'] as String?,
       notes: json['notes'] as String?,

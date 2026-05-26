@@ -1,38 +1,27 @@
-import 'package:flutter/foundation.dart';
-
 class ApiConfig {
   // ============================================
   // BACKEND CONFIGURATION
   // ============================================
-  // Default to the local backend and allow overrides with
-  // --dart-define=LOCAL_BACKEND_URL=...
+  // Default to local backend and allow overrides with
+  // --dart-define=BACKEND_BASE_URL=...
   static String get _defaultBackendUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8080';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:8080';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-        return 'http://localhost:8080';
-    }
+    return 'http://10.0.2.2:8080';
   }
 
-  static const String _localBackendUrlOverride =
-      String.fromEnvironment('LOCAL_BACKEND_URL', defaultValue: '');
+  static const String _baseUrlOverride =
+      String.fromEnvironment('BACKEND_BASE_URL', defaultValue: '');
+  static const String _legacyChoreoBaseUrlOverride =
+      String.fromEnvironment('CHOREO_BASE_URL', defaultValue: '');
 
-  static String get localBaseUrl => _localBackendUrlOverride.isNotEmpty
-      ? _localBackendUrlOverride
-      : _defaultBackendUrl;
-
-  // Kept for backward compatibility.
-  static String get choreoBaseUrl => localBaseUrl;
-  static String get baseUrl => localBaseUrl;
+  static String get baseUrl {
+    if (_baseUrlOverride.isNotEmpty) {
+      return _baseUrlOverride;
+    }
+    if (_legacyChoreoBaseUrlOverride.isNotEmpty) {
+      return _legacyChoreoBaseUrlOverride;
+    }
+    return _defaultBackendUrl;
+  }
 
   // API Endpoints
   static const String sendOtpEndpoint = '/api/v1/auth/send-otp';
@@ -55,8 +44,8 @@ class ApiConfig {
       '/api/v1/lounge-staff/profile/update';
 
   // Helper methods to get the correct base URL.
-  static String getAuthBaseUrl() => localBaseUrl;
-  static String getLoungeBaseUrl() => localBaseUrl;
+  static String getAuthBaseUrl() => baseUrl;
+  static String getLoungeBaseUrl() => baseUrl;
 
   // Full URLs - Auth APIs use the selected backend.
   static String get sendOtpUrl => '${getAuthBaseUrl()}$sendOtpEndpoint';
