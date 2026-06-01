@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/theme_config.dart';
+import '../../core/services/image_cache_service.dart';
 import '../../domain/entities/lounge.dart';
 
 class OwnerLoungeBlogDetailsPage extends StatelessWidget {
@@ -170,12 +171,13 @@ class OwnerLoungeBlogDetailsPage extends StatelessWidget {
                     itemBuilder: (context, index) {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          images[index],
+                        child: OptimizedCachedImage(
+                          imageUrl: images[index],
                           width: 160,
                           height: 120,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          quality: 'sd',
+                          errorWidget: (_, __, ___) => Container(
                             width: 160,
                             height: 120,
                             color: Colors.grey.shade200,
@@ -212,10 +214,11 @@ class OwnerLoungeBlogDetailsPage extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (imageUrl != null && imageUrl.trim().isNotEmpty)
-              Image.network(
-                imageUrl,
+              OptimizedCachedImage(
+                imageUrl: imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                quality: 'hd',
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
               ),
             DecoratedBox(
               decoration: BoxDecoration(

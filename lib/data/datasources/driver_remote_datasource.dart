@@ -47,6 +47,10 @@ abstract class DriverRemoteDataSource {
   Future<LoungeBookingDriverAssignmentModel?> checkDriverAssignment({
     required String bookingId,
   });
+
+  /// Cancel an assigned driver for a booking
+  /// POST /api/v1/lounge-booking-driver-assignments/:id/cancel
+  Future<void> cancelDriverAssignment({required String assignmentId});
 }
 
 class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
@@ -333,8 +337,8 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
     required String bookingId,
   }) async {
     try {
-      final response = await _dio
-          .get('/api/v1/lounge-booking-driver-assignments/check/$bookingId');
+      final response =
+          await _dio.get('/api/v1/lounge-bookings/$bookingId/assigned-driver');
 
       if (response.data == null) return null;
 
@@ -346,7 +350,8 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
       if (assignmentData == null) return null;
 
       return LoungeBookingDriverAssignmentModel.fromJson(
-          assignmentData as Map<String, dynamic>);
+        assignmentData as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       print('❌ [ASSIGNMENT CHECK] DioException: ${e.message}');
       // Treat as not assigned on error by returning null
@@ -354,6 +359,38 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
     } catch (e) {
       print('❌ [ASSIGNMENT CHECK] Unexpected error: $e');
       return null;
+    }
+  }
+
+  @override
+  Future<void> cancelDriverAssignment({required String assignmentId}) async {
+    try {
+      final response = await _dio.post(
+        '/api/v1/lounge-booking-driver-assignments/$assignmentId/cancel',
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+          responseType: ResponseType.json,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 300,
+        ),
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        throw ServerException(
+          'Failed to cancel assignment',
+          'CANCEL_ASSIGNMENT_FAILED',
+          statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } catch (e) {
+      throw ServerException(
+        'Failed to cancel assignment',
+        'CANCEL_ASSIGNMENT_FAILED',
+      );
     }
   }
 

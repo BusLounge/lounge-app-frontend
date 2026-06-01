@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
 import '../../core/di/injection_container.dart';
+import '../../core/services/image_cache_service.dart';
 import '../../data/datasources/lounge_owner_remote_datasource.dart';
 import '../../data/datasources/route_remote_datasource.dart';
 import '../../domain/entities/lounge.dart';
@@ -604,10 +605,11 @@ class _EditLoungeDetailsPageState extends State<EditLoungeDetailsPage> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: source.isNetwork
-                        ? Image.network(
-                            source.value,
+                        ? OptimizedCachedImage(
+                            imageUrl: source.value,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            quality: 'sd',
+                            errorWidget: (_, __, ___) => Container(
                               color: Colors.grey.shade200,
                               child: const Icon(Icons.broken_image_outlined),
                             ),

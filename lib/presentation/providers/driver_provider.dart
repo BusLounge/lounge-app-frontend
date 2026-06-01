@@ -210,6 +210,37 @@ class DriverProvider extends ChangeNotifier {
     }
   }
 
+  /// Cancel the currently assigned driver for a booking
+  Future<bool> cancelDriverAssignment({required String assignmentId}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await remoteDataSource.cancelDriverAssignment(
+        assignmentId: assignmentId,
+      );
+
+      if (_existingAssignment?.id == assignmentId) {
+        _existingAssignment = null;
+      }
+      _lastAssignment = null;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppException catch (e) {
+      _error = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'An unexpected error occurred';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Clear error
   void clearError() {
     _error = null;

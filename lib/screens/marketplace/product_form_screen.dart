@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/theme_config.dart';
 import '../../core/di/injection_container.dart';
+import '../../core/services/image_cache_service.dart';
 import '../../domain/entities/lounge_product.dart';
 import '../../presentation/providers/marketplace_provider.dart';
 
@@ -280,10 +281,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: Image.network(
-              _existingImageUrl!,
+            child: OptimizedCachedImage(
+              imageUrl: _existingImageUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
+              quality: 'sd',
+              errorWidget: (_, __, ___) => _buildImagePlaceholder(),
             ),
           ),
           Positioned(

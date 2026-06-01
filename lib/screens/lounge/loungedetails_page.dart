@@ -8,6 +8,7 @@ import '../../core/network/api_client.dart';
 import '../../data/datasources/auth_local_datasource.dart';
 import '../../data/models/lounge_model.dart';
 import '../../presentation/providers/lounge_staff_provider.dart';
+import '../../core/services/image_cache_service.dart';
 
 class LoungeDetailsPage extends StatefulWidget {
   final String? loungeId;
@@ -142,42 +143,29 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
                               children: [
                                 _lounge!.primaryPhoto != null &&
                                         _lounge!.primaryPhoto!.isNotEmpty
-                                    ? Image.network(
-                                        _lounge!.primaryPhoto!,
+                                    ? OptimizedCachedImage(
+                                        imageUrl: _lounge!.primaryPhoto!,
                                         height: 200,
                                         width: double.infinity,
                                         fit: BoxFit.cover,
-                                        loadingBuilder:
-                                            (context, child, loadingProgress) {
-                                          if (loadingProgress == null) {
-                                            return child;
-                                          }
+                                        quality: 'hd',
+                                        loadingWidget: (context, url) {
                                           return Container(
                                             height: 200,
                                             color: Colors.grey.shade200,
-                                            child: Center(
-                                              child: CircularProgressIndicator(
-                                                value: loadingProgress
-                                                            .expectedTotalBytes !=
-                                                        null
-                                                    ? loadingProgress
-                                                            .cumulativeBytesLoaded /
-                                                        loadingProgress
-                                                            .expectedTotalBytes!
-                                                    : null,
-                                              ),
+                                            child: const Center(
+                                              child: CircularProgressIndicator(),
                                             ),
                                           );
                                         },
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
+                                        errorWidget: (context, url, error) {
                                           return Container(
                                             height: 200,
                                             color: Colors.grey.shade300,
-                                            child: Column(
+                                            child: const Column(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
-                                              children: const [
+                                              children: [
                                                 Icon(
                                                   Icons.image_not_supported,
                                                   size: 50,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/theme_config.dart';
+import '../../core/services/image_cache_service.dart';
 import '../../domain/entities/lounge_product.dart';
 import '../../presentation/providers/marketplace_provider.dart';
 import 'product_form_screen.dart';
@@ -416,10 +417,13 @@ class _MarketplaceProductsScreenState extends State<MarketplaceProductsScreen> {
       child: product.imageUrl != null && product.imageUrl!.isNotEmpty
           ? ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                product.imageUrl!,
+              child: OptimizedCachedImage(
+                imageUrl: product.imageUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildPlaceholderIcon(product),
+                width: 80,
+                height: 80,
+                quality: 'sd',
+                errorWidget: (_, __, ___) => _buildPlaceholderIcon(product),
               ),
             )
           : _buildPlaceholderIcon(product),

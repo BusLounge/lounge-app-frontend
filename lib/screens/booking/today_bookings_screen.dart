@@ -410,7 +410,7 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           guestCount: booking.guestCount,
                           phone: booking.passengerPhone,
                           blinkAnimation: _blinkController,
-                          loungeId: _selectedLoungeId,
+                          loungeId: booking.loungeId,
                           onViewOrders: () async {
                             await Navigator.push(
                               context,
@@ -494,7 +494,7 @@ class BookingCard extends StatelessWidget {
   final int guestCount;
   final String? phone;
   final AnimationController blinkAnimation;
-  final String? loungeId;
+  final String loungeId;
   final VoidCallback onViewOrders;
 
   const BookingCard({

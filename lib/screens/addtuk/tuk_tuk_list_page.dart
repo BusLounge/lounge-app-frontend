@@ -24,6 +24,9 @@ class TukTukListPage extends StatefulWidget {
 }
 
 class _TukTukListPageState extends State<TukTukListPage> {
+  String? _assignedDriverId;
+  String? _assignedAssignmentId;
+
   Future<void> _showAlreadyAssignedDialog() async {
     await showDialog<void>(
       context: context,
@@ -41,6 +44,70 @@ class _TukTukListPageState extends State<TukTukListPage> {
           ],
         );
       },
+    );
+  }
+
+  Future<void> _cancelAssignedDriver(String assignmentId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cancel assigned driver?'),
+          content: const Text(
+            'This will remove the current driver assignment for this booking.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('No'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Yes, cancel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    if (!mounted || widget.bookingId == null || widget.bookingId!.isEmpty) {
+      return;
+    }
+
+    final driverProvider = context.read<DriverProvider>();
+    final success = await driverProvider.cancelDriverAssignment(
+      assignmentId: assignmentId,
+    );
+
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(driverProvider.error ?? 'Failed to cancel assignment'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    await _refreshAssignedDriverState();
+
+    if (widget.loungeId != null && widget.loungeId!.isNotEmpty) {
+      await context.read<DriverProvider>().getDriversByLounge(
+            loungeId: widget.loungeId!,
+          );
+      await _refreshAssignedDriverState();
+    }
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Driver assignment cancelled')),
     );
   }
 
@@ -135,6 +202,34 @@ class _TukTukListPageState extends State<TukTukListPage> {
     Navigator.pop(context);
   }
 
+  Future<void> _refreshAssignedDriverState() async {
+    final bookingId = widget.bookingId;
+    if (bookingId == null || bookingId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _assignedDriverId = null;
+        _assignedAssignmentId = null;
+      });
+      return;
+    }
+
+    final driverProvider = context.read<DriverProvider>();
+    final assigned = await driverProvider.checkDriverAssigned(
+      bookingId: bookingId,
+    )
+        ? driverProvider.existingAssignment
+        : null;
+
+    if (!mounted) return;
+
+    setState(() {
+      _assignedDriverId = assigned?.driverId;
+      _assignedAssignmentId = assigned?.id;
+    });
+  }
+
+  bool get _hasAssignedDriver => _assignedDriverId != null;
+
   @override
   void initState() {
     super.initState();
@@ -145,13 +240,9 @@ class _TukTukListPageState extends State<TukTukListPage> {
             .getDriversByLounge(
               loungeId: widget.loungeId!,
             )
-            .then((_) {
-          if (widget.bookingId != null && widget.bookingId!.isNotEmpty) {
-            context.read<DriverProvider>().checkDriverAssigned(
-                  bookingId: widget.bookingId!,
-                );
-          }
-        });
+            .then((_) => _refreshAssignedDriverState());
+      } else {
+        _refreshAssignedDriverState();
       }
     });
   }
@@ -246,11 +337,9 @@ class _TukTukListPageState extends State<TukTukListPage> {
             itemCount: drivers.length,
             itemBuilder: (context, index) {
               final driver = drivers[index];
-              final assigned = driverProvider.existingAssignment;
-              final bookingHasAssignedDriver = assigned != null;
-              final isAssigned =
-                  assigned != null && assigned.driverId == driver.id;
-              final isAssignDisabled = bookingHasAssignedDriver && !isAssigned;
+              final isAssigned = _assignedDriverId == driver.id;
+              final isAssignDisabled = _hasAssignedDriver && !isAssigned;
+              final assignmentId = _assignedAssignmentId;
               return Column(
                 children: [
                   TukTukCard(
@@ -265,6 +354,9 @@ class _TukTukListPageState extends State<TukTukListPage> {
                               driverId: driver.id,
                               driverContact: driver.contactNumber,
                             ),
+                    onCancelAssignment: (isAssigned && assignmentId != null)
+                        ? () => _cancelAssignedDriver(assignmentId)
+                        : null,
                   ),
                   if (index < drivers.length - 1) const SizedBox(height: 12),
                 ],
@@ -282,6 +374,7 @@ class TukTukCard extends StatefulWidget {
   final String vehicleNo;
   final String phone;
   final VoidCallback? onAssign;
+  final VoidCallback? onCancelAssignment;
   final bool isAssigned;
   final bool isAssignDisabled;
 
@@ -291,6 +384,7 @@ class TukTukCard extends StatefulWidget {
     required this.vehicleNo,
     required this.phone,
     this.onAssign,
+    this.onCancelAssignment,
     this.isAssigned = false,
     this.isAssignDisabled = false,
   });
@@ -302,11 +396,19 @@ class TukTukCard extends StatefulWidget {
 class _TukTukCardState extends State<TukTukCard> {
   @override
   Widget build(BuildContext context) {
+    final assignedCardColor = Colors.orange.shade50;
+    final assignedBorderColor = Colors.orange.shade700;
+    final assignedAccentColor = Colors.orange.shade800;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: widget.isAssigned ? assignedCardColor : AppColors.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: widget.isAssigned ? assignedBorderColor : AppColors.primary,
+          width: widget.isAssigned ? 1.4 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.textPrimary.withOpacity(0.08),
@@ -329,31 +431,86 @@ class _TukTukCardState extends State<TukTukCard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    widget.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: widget.isAssigned
+                              ? assignedAccentColor
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      if (widget.isAssigned) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade200,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Text(
+                            'ASSIGNED',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.deepOrange,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.secondary.withOpacity(0.2),
+                      color: widget.isAssigned
+                          ? Colors.orange.shade200
+                          : AppColors.secondary.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
-                      'Tuk Tuk',
+                    child: Text(
+                      widget.isAssigned ? 'Assigned Tuk Tuk' : 'Tuk Tuk',
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.secondary,
+                        color: widget.isAssigned
+                            ? Colors.deepOrange
+                            : AppColors.secondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                  if (widget.isAssigned) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.shade700),
+                      ),
+                      child: Text(
+                        'Assigned for booking',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.deepOrange.shade700,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -373,49 +530,119 @@ class _TukTukCardState extends State<TukTukCard> {
             children: [
               const Icon(Icons.phone, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
-              Text(widget.phone,
-                  style: const TextStyle(color: AppColors.textPrimary)),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final phoneUrl = Uri(scheme: 'tel', path: widget.phone);
-                  if (await canLaunchUrl(phoneUrl)) {
-                    await launchUrl(phoneUrl);
-                  }
-                },
-                icon: const Icon(Icons.call, size: 16),
-                label: const Text('Call'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.textLight,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+              Expanded(
+                child: Text(
+                  widget.phone,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.textPrimary),
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: widget.onAssign,
-                icon: const Icon(Icons.assignment_ind, size: 16),
-                label: widget.isAssigned
-                    ? const Text('Assigned')
-                    : (widget.isAssignDisabled
-                        ? const Text('Already Assigned')
-                        : const Text('Assign')),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.isAssigned
-                      ? Colors.green
-                      : (widget.isAssignDisabled
-                          ? Colors.grey
-                          : AppColors.primary),
-                  foregroundColor: AppColors.textLight,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+              Flexible(
+                fit: FlexFit.loose,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final phoneUrl =
+                              Uri(scheme: 'tel', path: widget.phone);
+                          if (await canLaunchUrl(phoneUrl)) {
+                            await launchUrl(phoneUrl);
+                          }
+                        },
+                        icon: const Icon(Icons.call, size: 16),
+                        label: const Text('Call'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.textLight,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (widget.isAssigned)
+                        ElevatedButton.icon(
+                          onPressed: widget.onCancelAssignment,
+                          icon: const Icon(Icons.cancel_outlined, size: 16),
+                          label: const Text('Cancel'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: Colors.deepOrange.shade700,
+                            foregroundColor: AppColors.textLight,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        )
+                      else
+                        ElevatedButton.icon(
+                          onPressed: widget.onAssign,
+                          icon: const Icon(Icons.assignment_ind, size: 16),
+                          label: widget.isAssignDisabled
+                              ? const Text('Already')
+                              : const Text('Assign'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: widget.isAssignDisabled
+                                ? Colors.grey
+                                : AppColors.primary,
+                            foregroundColor: AppColors.textLight,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
+          if (widget.isAssigned) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.deepOrange,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Assigned driver for this booking',
+                  style: TextStyle(
+                    color: Colors.deepOrange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
 import '../../core/di/injection_container.dart';
+import '../../core/services/image_cache_service.dart';
 import '../../data/datasources/route_remote_datasource.dart';
 import '../../data/models/route_model.dart';
 import '../../domain/entities/lounge.dart';
@@ -603,12 +604,13 @@ class _LoungeDetailsPageState extends State<LoungeDetailsPage> {
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, index) => ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  images[index],
+                child: OptimizedCachedImage(
+                  imageUrl: images[index],
                   width: 140,
                   height: 110,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  quality: 'sd',
+                  errorWidget: (context, error, stackTrace) => Container(
                     width: 140,
                     height: 110,
                     color: Colors.grey.shade100,
