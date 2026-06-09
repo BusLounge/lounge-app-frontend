@@ -487,6 +487,10 @@ extension on LoungeBookingModel {
       loungeAddress: loungeAddress,
       passengerName: passengerName,
       passengerPhone: passengerPhone,
+      masterBookingId: masterBookingId,
+      hasTransport: hasTransport,
+      vehicleType: vehicleType,
+      pickupLocationName: pickupLocationName,
     );
   }
 }

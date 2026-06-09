@@ -23,6 +23,10 @@ class LoungeBookingModel extends LoungeBooking {
     super.loungeAddress,
     super.passengerName,
     super.passengerPhone,
+    super.masterBookingId,
+    super.hasTransport = false,
+    super.vehicleType,
+    super.pickupLocationName,
   });
 
   /// Create model from JSON (from API response)
@@ -77,6 +81,10 @@ class LoungeBookingModel extends LoungeBooking {
       loungeAddress: _stringFromJson(json['lounge_address']),
       passengerName: passengerName,
       passengerPhone: passengerPhone,
+      masterBookingId: _stringFromJson(json['master_booking_id']),
+      hasTransport: json['has_transport'] == true || json['has_transport'] == 1,
+      vehicleType: _stringFromJson(json['vehicle_type']),
+      pickupLocationName: _stringFromJson(json['pickup_location_name']),
     );
   }
 
@@ -161,6 +169,10 @@ class LoungeBookingModel extends LoungeBooking {
       if (loungeAddress != null) 'lounge_address': loungeAddress,
       if (passengerName != null) 'passenger_name': passengerName,
       if (passengerPhone != null) 'passenger_phone': passengerPhone,
+      if (masterBookingId != null) 'master_booking_id': masterBookingId,
+      'has_transport': hasTransport,
+      if (vehicleType != null) 'vehicle_type': vehicleType,
+      if (pickupLocationName != null) 'pickup_location_name': pickupLocationName,
     };
   }
 
@@ -186,6 +198,10 @@ class LoungeBookingModel extends LoungeBooking {
       loungeAddress: entity.loungeAddress,
       passengerName: entity.passengerName,
       passengerPhone: entity.passengerPhone,
+      masterBookingId: entity.masterBookingId,
+      hasTransport: entity.hasTransport,
+      vehicleType: entity.vehicleType,
+      pickupLocationName: entity.pickupLocationName,
     );
   }
 }

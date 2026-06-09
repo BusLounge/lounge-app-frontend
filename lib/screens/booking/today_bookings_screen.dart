@@ -411,6 +411,7 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           phone: booking.passengerPhone,
                           blinkAnimation: _blinkController,
                           loungeId: booking.loungeId,
+                          hasTransport: booking.hasTransport,
                           onViewOrders: () async {
                             await Navigator.push(
                               context,
@@ -495,6 +496,7 @@ class BookingCard extends StatelessWidget {
   final String? phone;
   final AnimationController blinkAnimation;
   final String loungeId;
+  final bool hasTransport;
   final VoidCallback onViewOrders;
 
   const BookingCard({
@@ -509,6 +511,7 @@ class BookingCard extends StatelessWidget {
     this.phone,
     required this.blinkAnimation,
     required this.loungeId,
+    required this.hasTransport,
     required this.onViewOrders,
   });
 
@@ -610,30 +613,31 @@ class BookingCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TukTukListPage(
-                        loungeId: loungeId,
-                        bookingId: bookingId,
-                        guestName: name,
-                        guestContact: phone,
+              if (hasTransport)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TukTukListPage(
+                          loungeId: loungeId,
+                          bookingId: bookingId,
+                          guestName: name,
+                          guestContact: phone,
+                        ),
                       ),
+                    );
+                  },
+                  child: FadeTransition(
+                    opacity: blinkAnimation,
+                    child: _buildActionIcon(
+                      Icons.local_taxi,
+                      "Vehicle List",
+                      color: AppColors.primary,
+                      isBlinking: true,
                     ),
-                  );
-                },
-                child: FadeTransition(
-                  opacity: blinkAnimation,
-                  child: _buildActionIcon(
-                    Icons.local_taxi,
-                    "Vehicle List",
-                    color: AppColors.primary,
-                    isBlinking: true,
                   ),
                 ),
-              ),
               GestureDetector(
                 onTap: onViewOrders,
                 child: _buildActionIcon(

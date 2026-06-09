@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme_config.dart';
 import '../../presentation/providers/driver_provider.dart';
+import '../../presentation/providers/lounge_booking_provider.dart';
 
 class TukTukListPage extends StatefulWidget {
   final String? loungeId;
@@ -234,6 +235,9 @@ class _TukTukListPageState extends State<TukTukListPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.bookingId != null) {
+        context.read<LoungeBookingProvider>().getBookingById(widget.bookingId!);
+      }
       if (widget.loungeId != null) {
         context
             .read<DriverProvider>()
@@ -264,16 +268,102 @@ class _TukTukListPageState extends State<TukTukListPage> {
         ),
         centerTitle: true,
       ),
-      body: Consumer<DriverProvider>(
-        builder: (context, driverProvider, _) {
-          if (driverProvider.isLoading) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+      body: Consumer2<DriverProvider, LoungeBookingProvider>(
+        builder: (context, driverProvider, loungeBookingProvider, _) {
+          final booking = loungeBookingProvider.selectedBooking;
+          final showBookingInfo = booking != null && booking.id == widget.bookingId;
+          
+          Widget? bookingInfoCard;
+          if (showBookingInfo) {
+            final vehicleType = booking.vehicleType ?? 'N/A';
+            final pickupLocation = booking.pickupLocationName ?? 'N/A';
+            
+            bookingInfoCard = Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Booking Transport Details',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.directions_car, color: AppColors.secondary, size: 18),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Vehicle Booked: ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        vehicleType.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.location_on, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Pickup Location: ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          pickupLocation,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             );
           }
 
-          if (driverProvider.error != null) {
-            return Center(
+          Widget content;
+          if (driverProvider.isLoading) {
+            content = const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
+          } else if (driverProvider.error != null) {
+            content = Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -305,63 +395,70 @@ class _TukTukListPageState extends State<TukTukListPage> {
                 ],
               ),
             );
-          }
-
-          final drivers = driverProvider.driverList;
-
-          if (drivers.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.directions_car_outlined,
-                    size: 60,
-                    color: Colors.grey.shade300,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No drivers found',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade500,
+          } else {
+            final drivers = driverProvider.driverList;
+            if (drivers.isEmpty) {
+              content = Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.directions_car_outlined,
+                      size: 60,
+                      color: Colors.grey.shade300,
                     ),
-                  ),
-                ],
-              ),
-            );
+                    const SizedBox(height: 16),
+                    Text(
+                      'No drivers found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              content = ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: drivers.length,
+                itemBuilder: (context, index) {
+                  final driver = drivers[index];
+                  final isAssigned = _assignedDriverId == driver.id;
+                  final isAssignDisabled = _hasAssignedDriver && !isAssigned;
+                  final assignmentId = _assignedAssignmentId;
+                  return Column(
+                    children: [
+                      TukTukCard(
+                        name: driver.fullName,
+                        vehicleNo: driver.vehicleNumber,
+                        phone: driver.contactNumber,
+                        isAssigned: isAssigned,
+                        isAssignDisabled: isAssignDisabled,
+                        onAssign: (isAssigned || isAssignDisabled)
+                            ? null
+                            : () => _assignDriverToBooking(
+                                  driverId: driver.id,
+                                  driverContact: driver.contactNumber,
+                                ),
+                        onCancelAssignment: (isAssigned && assignmentId != null)
+                            ? () => _cancelAssignedDriver(assignmentId)
+                            : null,
+                      ),
+                      if (index < drivers.length - 1) const SizedBox(height: 12),
+                    ],
+                  );
+                },
+              );
+            }
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: drivers.length,
-            itemBuilder: (context, index) {
-              final driver = drivers[index];
-              final isAssigned = _assignedDriverId == driver.id;
-              final isAssignDisabled = _hasAssignedDriver && !isAssigned;
-              final assignmentId = _assignedAssignmentId;
-              return Column(
-                children: [
-                  TukTukCard(
-                    name: driver.fullName,
-                    vehicleNo: driver.vehicleNumber,
-                    phone: driver.contactNumber,
-                    isAssigned: isAssigned,
-                    isAssignDisabled: isAssignDisabled,
-                    onAssign: (isAssigned || isAssignDisabled)
-                        ? null
-                        : () => _assignDriverToBooking(
-                              driverId: driver.id,
-                              driverContact: driver.contactNumber,
-                            ),
-                    onCancelAssignment: (isAssigned && assignmentId != null)
-                        ? () => _cancelAssignedDriver(assignmentId)
-                        : null,
-                  ),
-                  if (index < drivers.length - 1) const SizedBox(height: 12),
-                ],
-              );
-            },
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (bookingInfoCard != null) bookingInfoCard,
+              Expanded(child: content),
+            ],
           );
         },
       ),

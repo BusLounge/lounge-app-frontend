@@ -25,6 +25,12 @@ class LoungeBooking {
   final String? passengerName;
   final String? passengerPhone;
 
+  // Transport fields
+  final String? masterBookingId;
+  final bool hasTransport;
+  final String? vehicleType;
+  final String? pickupLocationName;
+
   const LoungeBooking({
     required this.id,
     required this.loungeId,
@@ -45,6 +51,10 @@ class LoungeBooking {
     this.loungeAddress,
     this.passengerName,
     this.passengerPhone,
+    this.masterBookingId,
+    this.hasTransport = false,
+    this.vehicleType,
+    this.pickupLocationName,
   });
 
   // Helper getters
