@@ -9,6 +9,7 @@ class LoungeBookingModel extends LoungeBooking {
     required super.passengerId,
     required super.bookingReference,
     required super.checkInTime,
+    required super.scheduledArrival,
     super.checkOutTime,
     super.scheduledDeparture,
     required super.durationHours,
@@ -27,6 +28,7 @@ class LoungeBookingModel extends LoungeBooking {
     super.hasTransport = false,
     super.vehicleType,
     super.pickupLocationName,
+    super.driverAssignmentStatus,
   });
 
   /// Create model from JSON (from API response)
@@ -57,12 +59,15 @@ class LoungeBookingModel extends LoungeBooking {
         _stringFromJson(passengerInfo?['phone']) ??
         _stringFromJson(passengerInfo?['phone_number']);
 
+    final scheduledArrival = _dateTimeFromJson(json['scheduled_arrival']) ?? checkInTime ?? DateTime.now();
+
     return LoungeBookingModel(
       id: _stringFromJson(json['id']) ?? '',
       loungeId: _stringFromJson(json['lounge_id']) ?? '',
       passengerId: _stringFromJson(json['passenger_id']) ?? '',
       bookingReference: _stringFromJson(json['booking_reference']) ?? '',
       checkInTime: checkInTime ?? DateTime.now(),
+      scheduledArrival: scheduledArrival,
       checkOutTime: checkOutTime,
       scheduledDeparture: scheduledDeparture,
       durationHours: _intFromJson(json['duration_hours']) ?? 1,
@@ -85,6 +90,7 @@ class LoungeBookingModel extends LoungeBooking {
       hasTransport: json['has_transport'] == true || json['has_transport'] == 1,
       vehicleType: _stringFromJson(json['vehicle_type']),
       pickupLocationName: _stringFromJson(json['pickup_location_name']),
+      driverAssignmentStatus: _stringFromJson(json['driver_assignment_status']),
     );
   }
 
@@ -153,6 +159,7 @@ class LoungeBookingModel extends LoungeBooking {
       'passenger_id': passengerId,
       'booking_reference': bookingReference,
       'check_in_time': checkInTime.toIso8601String(),
+      'scheduled_arrival': scheduledArrival.toIso8601String(),
       if (checkOutTime != null)
         'check_out_time': checkOutTime!.toIso8601String(),
       if (scheduledDeparture != null)
@@ -173,6 +180,7 @@ class LoungeBookingModel extends LoungeBooking {
       'has_transport': hasTransport,
       if (vehicleType != null) 'vehicle_type': vehicleType,
       if (pickupLocationName != null) 'pickup_location_name': pickupLocationName,
+      if (driverAssignmentStatus != null) 'driver_assignment_status': driverAssignmentStatus,
     };
   }
 
@@ -184,6 +192,7 @@ class LoungeBookingModel extends LoungeBooking {
       passengerId: entity.passengerId,
       bookingReference: entity.bookingReference,
       checkInTime: entity.checkInTime,
+      scheduledArrival: entity.scheduledArrival,
       checkOutTime: entity.checkOutTime,
       scheduledDeparture: entity.scheduledDeparture,
       durationHours: entity.durationHours,
@@ -202,6 +211,7 @@ class LoungeBookingModel extends LoungeBooking {
       hasTransport: entity.hasTransport,
       vehicleType: entity.vehicleType,
       pickupLocationName: entity.pickupLocationName,
+      driverAssignmentStatus: entity.driverAssignmentStatus,
     );
   }
 }

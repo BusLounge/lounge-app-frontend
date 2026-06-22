@@ -6,6 +6,7 @@ class LoungeBooking {
   final String passengerId;
   final String bookingReference;
   final DateTime checkInTime;
+  final DateTime scheduledArrival;
   final DateTime? checkOutTime;
   final DateTime? scheduledDeparture;
   final int durationHours;
@@ -30,6 +31,7 @@ class LoungeBooking {
   final bool hasTransport;
   final String? vehicleType;
   final String? pickupLocationName;
+  final String? driverAssignmentStatus;
 
   const LoungeBooking({
     required this.id,
@@ -37,6 +39,7 @@ class LoungeBooking {
     required this.passengerId,
     required this.bookingReference,
     required this.checkInTime,
+    required this.scheduledArrival,
     this.checkOutTime,
     this.scheduledDeparture,
     required this.durationHours,
@@ -55,6 +58,7 @@ class LoungeBooking {
     this.hasTransport = false,
     this.vehicleType,
     this.pickupLocationName,
+    this.driverAssignmentStatus,
   });
 
   // Helper getters

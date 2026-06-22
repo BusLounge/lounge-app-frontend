@@ -32,7 +32,7 @@ class LoungeSpecialPackageRemoteDataSourceImpl
     try {
       AppLogger.info('Fetching special packages for lounge: $loungeId');
       final response = await _apiClient.get(
-        '/api/v1/lounges/$loungeId/special-packages',
+        '/api/v1/marketplace/special-packages/lounge/$loungeId',
       );
 
       if (response.statusCode == 200) {
@@ -65,7 +65,7 @@ class LoungeSpecialPackageRemoteDataSourceImpl
     try {
       AppLogger.info('Creating special package for lounge: $loungeId');
       final response = await _apiClient.post(
-        '/api/v1/lounges/$loungeId/special-packages',
+        '/api/v1/marketplace/special-packages/lounge/$loungeId',
         data: data,
       );
 
@@ -98,7 +98,7 @@ class LoungeSpecialPackageRemoteDataSourceImpl
     try {
       AppLogger.info('Updating special package: $packageId');
       final response = await _apiClient.put(
-        '/api/v1/lounges/$loungeId/special-packages/$packageId',
+        '/api/v1/marketplace/special-packages/$packageId',
         data: data,
       );
 
@@ -127,7 +127,7 @@ class LoungeSpecialPackageRemoteDataSourceImpl
     try {
       AppLogger.info('Deleting special package: $packageId');
       final response = await _apiClient.delete(
-        '/api/v1/lounges/$loungeId/special-packages/$packageId',
+        '/api/v1/marketplace/special-packages/$packageId',
       );
 
       if (response.statusCode == 200 || response.statusCode == 204) {

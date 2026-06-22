@@ -473,6 +473,7 @@ extension on LoungeBookingModel {
       passengerId: passengerId,
       bookingReference: bookingReference,
       checkInTime: checkInTime,
+      scheduledArrival: scheduledArrival,
       checkOutTime: checkOutTime,
       scheduledDeparture: scheduledDeparture,
       durationHours: durationHours,
@@ -491,6 +492,7 @@ extension on LoungeBookingModel {
       hasTransport: hasTransport,
       vehicleType: vehicleType,
       pickupLocationName: pickupLocationName,
+      driverAssignmentStatus: driverAssignmentStatus,
     );
   }
 }

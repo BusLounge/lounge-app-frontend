@@ -543,8 +543,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                             greeting: greeting,
                             userName: userName,
                           ),
-                          const SizedBox(height: 16),
-                          _buildExchangeRatesSection(),
                           const SizedBox(height: 18),
                           const Text(
                             'Quick Actions',
@@ -1179,26 +1177,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                 label: 'Verified',
                 filled: true,
               ),
-              const SizedBox(width: 8),
-              _buildTopBadge(
-                icon: Icons.schedule_rounded,
-                label: _formatLastUpdated(_currentTime),
-              ),
-              const SizedBox(width: 8),
-              FutureBuilder<_WeatherSnapshot>(
-                future: _weatherFuture,
-                builder: (context, snapshot) {
-                  final weather = snapshot.data;
-                  final label = weather == null
-                      ? 'Weather'
-                      : '${weather.temperatureC.toStringAsFixed(0)}°C · ${weather.weatherLabel}';
-
-                  return _buildTopBadge(
-                    icon: weather?.weatherIcon ?? Icons.wb_sunny_rounded,
-                    label: label,
-                  );
-                },
-              ),
             ],
           ),
         ),
@@ -1259,35 +1237,6 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                       icon: Icons.verified_rounded,
                       label: 'Verified',
                       filled: true,
-                    ),
-                    const Spacer(),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildTopBadge(
-                            icon: Icons.schedule_rounded,
-                            label: _formatLastUpdated(_currentTime),
-                          ),
-                          const SizedBox(width: 8),
-                          FutureBuilder<_WeatherSnapshot>(
-                            future: _weatherFuture,
-                            builder: (context, snapshot) {
-                              final weather = snapshot.data;
-                              final label = weather == null
-                                  ? 'Weather'
-                                  : '${weather.temperatureC.toStringAsFixed(0)}°C · ${weather.weatherLabel}';
-
-                              return _buildTopBadge(
-                                icon: weather?.weatherIcon ?? Icons.wb_sunny_rounded,
-                                label: label,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),

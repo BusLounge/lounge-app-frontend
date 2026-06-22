@@ -2,13 +2,12 @@ class AppConfig {
   // API configuration - Choreo backend by default.
   // Override with --dart-define=BACKEND_BASE_URL=...
   static String get _defaultBackendUrl {
+    // Default to the Choreo backend
     return 'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
   }
 
   static const String _backendUrlOverride =
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: '');
-  static const String _legacyChoreoBackendUrlOverride =
-      String.fromEnvironment('CHOREO_BASE_URL', defaultValue: '');
   static const String _webSocketUrlOverride =
       String.fromEnvironment('WEBSOCKET_URL', defaultValue: '');
   static const String _webSocketEnabledOverride =
@@ -24,9 +23,6 @@ class AppConfig {
   static String get baseUrl {
     if (_backendUrlOverride.isNotEmpty) {
       return _backendUrlOverride;
-    }
-    if (_legacyChoreoBackendUrlOverride.isNotEmpty) {
-      return _legacyChoreoBackendUrlOverride;
     }
     return _defaultBackendUrl;
   }

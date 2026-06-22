@@ -51,6 +51,10 @@ abstract class DriverRemoteDataSource {
   /// Cancel an assigned driver for a booking
   /// POST /api/v1/lounge-booking-driver-assignments/:id/cancel
   Future<void> cancelDriverAssignment({required String assignmentId});
+
+  /// Complete an assigned driver for a booking
+  /// POST /api/v1/lounge-booking-driver-assignments/:id/complete
+  Future<void> completeDriverAssignment({required String assignmentId});
 }
 
 class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
@@ -394,12 +398,44 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
     }
   }
 
+  @override
+  Future<void> completeDriverAssignment({required String assignmentId}) async {
+    try {
+      final response = await _dio.post(
+        '/api/v1/lounge-booking-driver-assignments/$assignmentId/complete',
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+          responseType: ResponseType.json,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 300,
+        ),
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        throw ServerException(
+          'Failed to complete assignment',
+          'COMPLETE_ASSIGNMENT_FAILED',
+          statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } catch (e) {
+      throw ServerException(
+        'Failed to complete assignment',
+        'COMPLETE_ASSIGNMENT_FAILED',
+      );
+    }
+  }
+
   AppException _handleDioError(DioException error) {
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.sendTimeout) {
       return const NetworkException(
-        'Connection timeout. Please check if the backend server is running on http://192.168.79.79:8080',
+        'Connection timeout. Please check your internet connection or backend server status.',
       );
     }
 

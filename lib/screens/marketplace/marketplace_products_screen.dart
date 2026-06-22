@@ -198,10 +198,11 @@ class _MarketplaceProductsScreenState extends State<MarketplaceProductsScreen> {
         itemBuilder: (context, index) {
           // "All" chip
           if (index == 0) {
+            final packagesCount = Provider.of<LoungeSpecialPackageProvider>(context).packages.length;
             return _buildCategoryChip(
               id: null,
               name: 'All',
-              count: provider.products.length,
+              count: provider.products.length + packagesCount,
               isSelected:
                   provider.selectedCategoryId == null && !_showSpecialPackages,
               onTap: () {
@@ -319,17 +320,28 @@ class _MarketplaceProductsScreenState extends State<MarketplaceProductsScreen> {
 
   Widget _buildProductsList(MarketplaceProvider provider) {
     final products = _filterProducts(provider.filteredProducts);
+    final isAllView = provider.selectedCategoryId == null;
+    final pkgProvider = Provider.of<LoungeSpecialPackageProvider>(context);
+    final packages = pkgProvider.packages;
 
-    if (products.isEmpty) {
+    final totalCount = products.length + (isAllView ? packages.length : 0);
+
+    if (totalCount == 0) {
       return _buildEmptyState();
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(AppSpacing.medium),
-      itemCount: products.length,
+      itemCount: totalCount,
       itemBuilder: (context, index) {
-        final product = products[index];
-        return _buildProductCard(product, provider);
+        if (index < products.length) {
+          final product = products[index];
+          return _buildProductCard(product, provider);
+        } else {
+          final pkgIndex = index - products.length;
+          final pkg = packages[pkgIndex];
+          return _buildSpecialPackageCard(pkg, pkgProvider);
+        }
       },
     );
   }

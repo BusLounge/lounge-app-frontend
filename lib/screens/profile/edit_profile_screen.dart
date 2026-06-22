@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme_config.dart';
+import '../../core/di/injection_container.dart';
+import '../../data/datasources/lounge_owner_remote_datasource.dart';
 import '../../presentation/providers/lounge_owner_provider.dart';
 import '../../presentation/providers/auth_provider.dart';
 
@@ -17,13 +19,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _nicController = TextEditingController();
-  final _districtController = TextEditingController();
   bool _isLoading = false;
+
+  late LoungeOwnerRemoteDataSource _loungeOwnerRemoteDataSource;
+  List<Map<String, dynamic>> _districts = [];
+  bool _isLoadingDistricts = true;
+  String? _districtsError;
+  String? _selectedDistrictId;
 
   @override
   void initState() {
     super.initState();
+    _loungeOwnerRemoteDataSource =
+        InjectionContainer().loungeOwnerRemoteDataSource;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDistricts();
       _loadUserData();
     });
   }
@@ -43,11 +53,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emailController.text = loungeOwner?.managerEmail ?? user?.email ?? '';
     _phoneController.text = user?.phoneNumber ?? '';
     _nicController.text = loungeOwner?.managerNicNumber ?? user?.nic ?? '';
-    _districtController.text = loungeOwner?.district ?? '';
+
+    // Store the raw district value (UUID) for dropdown pre-selection
+    final rawDistrict = loungeOwner?.district?.trim();
+    if (rawDistrict != null && rawDistrict.isNotEmpty) {
+      _selectedDistrictId = rawDistrict;
+    }
+  }
+
+  Future<void> _loadDistricts() async {
+    setState(() {
+      _isLoadingDistricts = true;
+      _districtsError = null;
+    });
+
+    try {
+      final districts = await _loungeOwnerRemoteDataSource.getAllDistricts();
+      if (!mounted) return;
+
+      setState(() {
+        _districts = districts;
+        _isLoadingDistricts = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _districts = [];
+        _isLoadingDistricts = false;
+        _districtsError = 'Failed to load districts';
+      });
+    }
+  }
+
+  /// Resolve the current district ID to a display name
+  String _resolveDistrictName(String? districtId) {
+    if (districtId == null || districtId.isEmpty) return 'Not selected';
+
+    for (final district in _districts) {
+      if (district['id'] == districtId) {
+        final name = district['district']?.toString().trim();
+        if (name != null && name.isNotEmpty) return name;
+      }
+    }
+
+    return districtId; // fallback to raw id
   }
 
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedDistrictId == null || _selectedDistrictId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please select a district'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
       return;
     }
 
@@ -87,7 +152,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         managerFullName: _fullNameController.text.trim(),
         managerEmail: _emailController.text.trim(),
         managerNicNumber: _nicController.text.trim(),
-        districtId: _districtController.text.trim(),
+        districtId: _selectedDistrictId!.trim(),
       );
 
       if (ownerUpdateSuccess) {
@@ -142,8 +207,139 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _nicController.dispose();
-    _districtController.dispose();
     super.dispose();
+  }
+
+  Widget _buildDistrictDropdown() {
+    if (_isLoadingDistricts) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.location_on_outlined,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 12),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Loading districts...',
+              style: TextStyle(
+                color: AppColors.textSecondary.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_districtsError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.error.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.error.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: AppColors.error, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _districtsError!,
+                style: TextStyle(color: AppColors.error, fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: _loadDistricts,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Ensure the selected district ID is valid in the current list
+    final validIds = _districts.map((d) => d['id'] as String).toSet();
+    final currentValue =
+        (_selectedDistrictId != null && validIds.contains(_selectedDistrictId))
+            ? _selectedDistrictId
+            : null;
+
+    return DropdownButtonFormField<String>(
+      value: currentValue,
+      isExpanded: true,
+      decoration: InputDecoration(
+        hintText: 'Select your district',
+        hintStyle: TextStyle(
+          color: AppColors.textSecondary.withOpacity(0.5),
+        ),
+        prefixIcon: const Icon(
+          Icons.location_on_outlined,
+          color: AppColors.primary,
+        ),
+        filled: true,
+        fillColor: AppColors.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: AppColors.primary,
+            width: 2,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: AppColors.error,
+            width: 2,
+          ),
+        ),
+      ),
+      items: _districts.map((district) {
+        final id = district['id'] as String? ?? '';
+        final name = district['district'] as String? ?? '';
+        return DropdownMenuItem<String>(
+          value: id,
+          child: Text(name),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setState(() {
+          _selectedDistrictId = value;
+        });
+      },
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please select a district';
+        }
+        return null;
+      },
+    );
   }
 
   @override
@@ -501,54 +697,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _districtController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    hintText: 'Enter district',
-                    hintStyle: TextStyle(
-                      color: AppColors.textSecondary.withOpacity(0.5),
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.location_on_outlined,
-                      color: AppColors.primary,
-                    ),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: AppColors.primary,
-                        width: 2,
-                      ),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.error),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: AppColors.error,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter district';
-                    }
-                    return null;
-                  },
-                ),
+                _buildDistrictDropdown(),
 
                 const SizedBox(height: 24),
                 const SizedBox(height: 16),

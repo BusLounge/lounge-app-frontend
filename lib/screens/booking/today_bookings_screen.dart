@@ -91,8 +91,9 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
   String _formatTime(DateTime? dateTime) {
     if (dateTime == null) return 'N/A';
 
-    final hour = dateTime.hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final localDateTime = dateTime.toLocal();
+    final hour = localDateTime.hour;
+    final minute = localDateTime.minute.toString().padLeft(2, '0');
     final period = hour >= 12 ? 'pm' : 'am';
     final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
 
@@ -404,7 +405,7 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           bookingId: booking.id,
                           name: booking.passengerName ?? 'Guest',
                           place: booking.loungeName ?? 'Lounge',
-                          time: _formatTime(booking.checkInTime),
+                          time: _formatTime(booking.scheduledArrival),
                           status: booking.status,
                           bookingReference: booking.bookingReference,
                           guestCount: booking.guestCount,
@@ -412,6 +413,8 @@ class _TodayBookingsScreenState extends State<TodayBookingsScreen>
                           blinkAnimation: _blinkController,
                           loungeId: booking.loungeId,
                           hasTransport: booking.hasTransport,
+                          driverAssignmentStatus: booking.driverAssignmentStatus,
+                          onRefresh: _loadBookings,
                           onViewOrders: () async {
                             await Navigator.push(
                               context,
@@ -497,6 +500,8 @@ class BookingCard extends StatelessWidget {
   final AnimationController blinkAnimation;
   final String loungeId;
   final bool hasTransport;
+  final String? driverAssignmentStatus;
+  final VoidCallback? onRefresh;
   final VoidCallback onViewOrders;
 
   const BookingCard({
@@ -512,6 +517,8 @@ class BookingCard extends StatelessWidget {
     required this.blinkAnimation,
     required this.loungeId,
     required this.hasTransport,
+    this.driverAssignmentStatus,
+    this.onRefresh,
     required this.onViewOrders,
   });
 
@@ -554,7 +561,7 @@ class BookingCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      time,
+                      'Scheduled Arrival: $time',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -614,30 +621,39 @@ class BookingCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               if (hasTransport)
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => TukTukListPage(
-                          loungeId: loungeId,
-                          bookingId: bookingId,
-                          guestName: name,
-                          guestContact: phone,
+                driverAssignmentStatus == 'completed'
+                    ? _buildActionIcon(
+                        Icons.check_circle,
+                        "Trip Completed",
+                        color: Colors.green.shade700,
+                      )
+                    : GestureDetector(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TukTukListPage(
+                                loungeId: loungeId,
+                                bookingId: bookingId,
+                                guestName: name,
+                                guestContact: phone,
+                              ),
+                            ),
+                          );
+                          if (onRefresh != null) {
+                            onRefresh!();
+                          }
+                        },
+                        child: FadeTransition(
+                          opacity: blinkAnimation,
+                          child: _buildActionIcon(
+                            Icons.local_taxi,
+                            "Vehicle List",
+                            color: AppColors.primary,
+                            isBlinking: true,
+                          ),
                         ),
                       ),
-                    );
-                  },
-                  child: FadeTransition(
-                    opacity: blinkAnimation,
-                    child: _buildActionIcon(
-                      Icons.local_taxi,
-                      "Vehicle List",
-                      color: AppColors.primary,
-                      isBlinking: true,
-                    ),
-                  ),
-                ),
               GestureDetector(
                 onTap: onViewOrders,
                 child: _buildActionIcon(

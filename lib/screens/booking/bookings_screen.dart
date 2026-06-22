@@ -289,6 +289,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                     children: [
                                       Text(booking.loungeName ?? 'Lounge'),
                                       Text('Ref: ${booking.bookingReference}'),
+                                      Text(
+                                          'Scheduled Arrival: ${_formatDateTime(booking.scheduledArrival)}'),
                                       Text('Guests: ${booking.guestCount}'),
                                       if (booking.passengerPhone != null &&
                                           booking.passengerPhone!.isNotEmpty)
@@ -364,6 +366,19 @@ class _BookingsScreenState extends State<BookingsScreen> {
         ).loungeOwner?.verificationStatus,
       ),
     );
+  }
+
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return 'N/A';
+
+    final localDateTime = dateTime.toLocal();
+    final date = "${localDateTime.year}-${localDateTime.month.toString().padLeft(2, '0')}-${localDateTime.day.toString().padLeft(2, '0')}";
+    final hour = localDateTime.hour;
+    final minute = localDateTime.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'pm' : 'am';
+    final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+    return '$date $hour12:$minute $period';
   }
 
   Color _getStatusColor(String status) {

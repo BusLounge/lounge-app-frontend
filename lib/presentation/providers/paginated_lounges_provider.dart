@@ -63,7 +63,7 @@ class PaginatedLoungesProvider extends ChangeNotifier {
   /// Load next page of lounges
   Future<void> loadNextPage() async {
     if (_isLoading || !_hasMore) {
-      AppLogger.warn('Cannot load next page: loading=$_isLoading, hasMore=$_hasMore');
+      AppLogger.warning('Cannot load next page: loading=$_isLoading, hasMore=$_hasMore');
       return;
     }
 
@@ -130,11 +130,11 @@ class PaginatedLoungesProvider extends ChangeNotifier {
           quality: _imageQuality,
           batchSize: 3,
         ).catchError((e) {
-          AppLogger.warn('Background image pre-caching failed: $e');
+          AppLogger.warning('Background image pre-caching failed: $e');
         });
       }
     } catch (e) {
-      AppLogger.warn('Failed to setup pre-caching: $e');
+      AppLogger.warning('Failed to setup pre-caching: $e');
     }
   }
 

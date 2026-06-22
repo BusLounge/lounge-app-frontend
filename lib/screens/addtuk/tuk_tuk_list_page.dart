@@ -112,6 +112,70 @@ class _TukTukListPageState extends State<TukTukListPage> {
     );
   }
 
+  Future<void> _completeAssignedDriver(String assignmentId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Complete driver assignment?'),
+          content: const Text(
+            'This will complete the driver assignment and mark transport as finished.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('No'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Yes, complete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    if (!mounted || widget.bookingId == null || widget.bookingId!.isEmpty) {
+      return;
+    }
+
+    final driverProvider = context.read<DriverProvider>();
+    final success = await driverProvider.completeDriverAssignment(
+      assignmentId: assignmentId,
+    );
+
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(driverProvider.error ?? 'Failed to complete assignment'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    await _refreshAssignedDriverState();
+
+    if (widget.loungeId != null && widget.loungeId!.isNotEmpty) {
+      await context.read<DriverProvider>().getDriversByLounge(
+            loungeId: widget.loungeId!,
+          );
+      await _refreshAssignedDriverState();
+    }
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Driver assignment completed')),
+    );
+  }
+
   Future<void> _assignDriverToBooking({
     required String driverId,
     required String driverContact,
@@ -433,6 +497,7 @@ class _TukTukListPageState extends State<TukTukListPage> {
                         name: driver.fullName,
                         vehicleNo: driver.vehicleNumber,
                         phone: driver.contactNumber,
+                        vehicleType: driver.vehicleType,
                         isAssigned: isAssigned,
                         isAssignDisabled: isAssignDisabled,
                         onAssign: (isAssigned || isAssignDisabled)
@@ -443,6 +508,9 @@ class _TukTukListPageState extends State<TukTukListPage> {
                                 ),
                         onCancelAssignment: (isAssigned && assignmentId != null)
                             ? () => _cancelAssignedDriver(assignmentId)
+                            : null,
+                        onCompleteAssignment: (isAssigned && assignmentId != null)
+                            ? () => _completeAssignedDriver(assignmentId)
                             : null,
                       ),
                       if (index < drivers.length - 1) const SizedBox(height: 12),
@@ -470,8 +538,10 @@ class TukTukCard extends StatefulWidget {
   final String name;
   final String vehicleNo;
   final String phone;
+  final String vehicleType;
   final VoidCallback? onAssign;
   final VoidCallback? onCancelAssignment;
+  final VoidCallback? onCompleteAssignment;
   final bool isAssigned;
   final bool isAssignDisabled;
 
@@ -480,8 +550,10 @@ class TukTukCard extends StatefulWidget {
     required this.name,
     required this.vehicleNo,
     required this.phone,
+    required this.vehicleType,
     this.onAssign,
     this.onCancelAssignment,
+    this.onCompleteAssignment,
     this.isAssigned = false,
     this.isAssignDisabled = false,
   });
@@ -491,6 +563,33 @@ class TukTukCard extends StatefulWidget {
 }
 
 class _TukTukCardState extends State<TukTukCard> {
+  String _getFormattedVehicleType(String type) {
+    switch (type.toLowerCase()) {
+      case 'three_wheeler':
+        return 'Three Wheeler';
+      case 'van':
+        return 'Van';
+      case 'car':
+        return 'Car';
+      default:
+        if (type.isEmpty) return 'Vehicle';
+        return type[0].toUpperCase() + type.substring(1);
+    }
+  }
+
+  IconData _getVehicleIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'three_wheeler':
+        return Icons.electric_rickshaw;
+      case 'van':
+        return Icons.airport_shuttle;
+      case 'car':
+        return Icons.directions_car;
+      default:
+        return Icons.directions_car;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final assignedCardColor = Colors.orange.shade50;
@@ -576,7 +675,9 @@ class _TukTukCardState extends State<TukTukCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      widget.isAssigned ? 'Assigned Tuk Tuk' : 'Tuk Tuk',
+                      widget.isAssigned
+                          ? 'Assigned ${_getFormattedVehicleType(widget.vehicleType)}'
+                          : _getFormattedVehicleType(widget.vehicleType),
                       style: TextStyle(
                         fontSize: 12,
                         color: widget.isAssigned
@@ -615,7 +716,7 @@ class _TukTukCardState extends State<TukTukCard> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.directions_car,
+              Icon(_getVehicleIcon(widget.vehicleType),
                   size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(widget.vehicleNo,
@@ -669,7 +770,7 @@ class _TukTukCardState extends State<TukTukCard> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (widget.isAssigned)
+                      if (widget.isAssigned) ...[
                         ElevatedButton.icon(
                           onPressed: widget.onCancelAssignment,
                           icon: const Icon(Icons.cancel_outlined, size: 16),
@@ -687,7 +788,27 @@ class _TukTukCardState extends State<TukTukCard> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                        )
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: widget.onCompleteAssignment,
+                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text('Complete'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: AppColors.textLight,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ]
                       else
                         ElevatedButton.icon(
                           onPressed: widget.onAssign,
