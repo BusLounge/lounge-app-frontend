@@ -5,7 +5,7 @@ class ApiConfig {
     // Default to the Choreo backend and allow overrides with
     // --dart-define=BACKEND_BASE_URL=...
   static String get _defaultBackendUrl {
-    // Default to the Choreo backend
+    // Choreo backend
     return 'https://6ed89a53-55ef-45f1-a497-e383bfedea00-dev.e1-us-east-azure.choreoapis.dev/default/backendloungeowner/v1.0';
   }
 
