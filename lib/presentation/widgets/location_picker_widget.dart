@@ -23,13 +23,21 @@ class LocationPickerWidget extends StatefulWidget {
   State<LocationPickerWidget> createState() => _LocationPickerWidgetState();
 }
 
-class _LocationPickerWidgetState extends State<LocationPickerWidget> {
+class _LocationPickerWidgetState extends State<LocationPickerWidget>
+    with SingleTickerProviderStateMixin {
   GoogleMapController? _mapController;
   LatLng? _selectedLocation;
   String _address = '';
   bool _isLoading = false;
   bool _hasLocationPermission = false;
   final TextEditingController _searchController = TextEditingController();
+
+  // Center-pin state
+  bool _isMapMoving = false;
+
+  // Animation controller for pin bounce
+  late AnimationController _pinAnimController;
+  late Animation<double> _pinBounceAnimation;
 
   // Places Autocomplete
   static const String _placesApiKey = 'AIzaSyAuA_RMUaOuqKOasnd5GU8MdYvrDmToXPg';
@@ -42,6 +50,16 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
     super.initState();
     _selectedLocation = widget.initialLocation ??
         const LatLng(6.9271, 79.8612); // Default to Colombo, Sri Lanka
+
+    // Pin bounce animation
+    _pinAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _pinBounceAnimation = Tween<double>(begin: 0, end: -12).animate(
+      CurvedAnimation(parent: _pinAnimController, curve: Curves.easeOut),
+    );
+
     _getAddressFromLatLng(_selectedLocation!);
     _initializeLocationPermission();
     _searchController.addListener(_onSearchChanged);
@@ -53,6 +71,7 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
     _searchController.removeListener(_onSearchChanged);
     _mapController?.dispose();
     _searchController.dispose();
+    _pinAnimController.dispose();
     super.dispose();
   }
 
@@ -132,7 +151,8 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
             (loc['lat'] as num).toDouble(),
             (loc['lng'] as num).toDouble(),
           );
-          _updateLocation(location);
+          setState(() => _selectedLocation = location);
+          _getAddressFromLatLng(location);
           _mapController?.animateCamera(
             CameraUpdate.newLatLngZoom(location, 16),
           );
@@ -176,7 +196,8 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
       );
 
       final newLocation = LatLng(position.latitude, position.longitude);
-      _updateLocation(newLocation);
+      setState(() => _selectedLocation = newLocation);
+      _getAddressFromLatLng(newLocation);
 
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(newLocation, 16),
@@ -237,7 +258,8 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
       List<Location> locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
         final location = LatLng(locations[0].latitude, locations[0].longitude);
-        _updateLocation(location);
+        setState(() => _selectedLocation = location);
+        _getAddressFromLatLng(location);
 
         _mapController?.animateCamera(CameraUpdate.newLatLngZoom(location, 16));
       }
@@ -250,9 +272,24 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
     }
   }
 
-  void _updateLocation(LatLng location) {
-    setState(() => _selectedLocation = location);
-    _getAddressFromLatLng(location);
+  void _onCameraMove(CameraPosition position) {
+    // Update selected location to the map center as user pans
+    _selectedLocation = position.target;
+    if (!_isMapMoving) {
+      setState(() => _isMapMoving = true);
+      _pinAnimController.forward(); // Lift pin up
+    }
+  }
+
+  void _onCameraIdle() {
+    // Map stopped moving — drop the pin and resolve the address
+    if (_isMapMoving) {
+      _pinAnimController.reverse(); // Drop pin down
+      setState(() => _isMapMoving = false);
+    }
+    if (_selectedLocation != null) {
+      _getAddressFromLatLng(_selectedLocation!);
+    }
   }
 
   void _confirmLocation() {
@@ -293,30 +330,22 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
       ),
       body: Stack(
         children: [
-          // Google Map
+          // Google Map — no markers; the pin is an overlay widget
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: _selectedLocation!,
               zoom: 14,
             ),
             onMapCreated: (controller) => _mapController = controller,
-            onTap: _updateLocation,
+            onCameraMove: _onCameraMove,
+            onCameraIdle: _onCameraIdle,
             zoomGesturesEnabled: true,
             scrollGesturesEnabled: true,
             rotateGesturesEnabled: true,
             tiltGesturesEnabled: true,
             compassEnabled: true,
-            markers: _selectedLocation != null
-                ? {
-                    Marker(
-                      markerId: const MarkerId('selected'),
-                      position: _selectedLocation!,
-                      draggable: true,
-                      onDragEnd: _updateLocation,
-                    ),
-                  }
-                : {},
-            myLocationEnabled: _hasLocationPermission,
+            markers: {},  // No markers — using center-pin overlay
+            myLocationEnabled: _hasLocationPermission,  // Blue dot for current location
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
@@ -324,6 +353,41 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
                 () => EagerGestureRecognizer(),
               ),
             },
+          ),
+
+          // Center pin overlay — man.png image pinned to the center of the map
+          Center(
+            child: AnimatedBuilder(
+              animation: _pinBounceAnimation,
+              builder: (context, child) {
+                return Transform.translate(
+                  // Offset upward so the bottom of the image touches the center point
+                  // plus the bounce animation offset
+                  offset: Offset(0, -24 + _pinBounceAnimation.value),
+                  child: child,
+                );
+              },
+              child: Image.asset(
+                'assets/images/man.png',
+                width: 48,
+                height: 48,
+              ),
+            ),
+          ),
+
+          // Small dot at exact center to show the precise pin point
+          Center(
+            child: Transform.translate(
+              offset: const Offset(0, 0),
+              child: Container(
+                width: 4,
+                height: 4,
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
           ),
 
           // Search bar + suggestions
@@ -450,7 +514,12 @@ class _LocationPickerWidgetState extends State<LocationPickerWidget> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(_address),
+                      Text(
+                        _isMapMoving ? 'Locating...' : _address,
+                        style: TextStyle(
+                          color: _isMapMoving ? Colors.grey : null,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, '

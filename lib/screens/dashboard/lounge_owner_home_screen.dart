@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/constants.dart';
+import '../../utils/responsive_utils.dart';
 import '../../config/theme_config.dart';
 import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/providers/lounge_owner_provider.dart';
@@ -377,23 +378,31 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     final isAfternoon = greeting == 'Good afternoon';
     final isEvening = !isMorning && !isAfternoon;
 
+    // Deep, saturated gradients — dark enough for white text to pop clearly
     final background = isMorning
         ? const LinearGradient(
-            colors: [Color(0xFFB8D9FF), Color(0xFF2F7BEA)],
+            colors: [Color(0xFF42A5F5), Color(0xFF1565C0)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           )
         : isAfternoon
             ? const LinearGradient(
-                colors: [Color(0xFF8FC6FF), Color(0xFF2563EB)],
+                colors: [Color(0xFF1565C0), Color(0xFF0D2B6E)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               )
             : const LinearGradient(
-                colors: [Color(0xFF1B4B8F), Color(0xFF0A2046)],
+                colors: [Color(0xFF1A1060), Color(0xFF050A1E)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               );
+
+    // Shadow color matched to gradient dominant hue
+    final shadowColor = isMorning
+        ? const Color(0xFF0D47A1)
+        : isAfternoon
+            ? const Color(0xFF0A2050)
+            : const Color(0xFF08041A);
 
     final icon = isMorning
         ? Icons.wb_sunny_rounded
@@ -401,18 +410,31 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
             ? Icons.wb_twilight_rounded
             : Icons.nightlight_round_rounded;
 
-    final titleColor = isEvening ? const Color(0xFFE8F1FF) : Colors.white;
+    const titleColor = Colors.white;
+    final cardPad = R.sp(18);
+    final iconBoxSize = R.sp(50);
+    final iconSize = R.sp(26);
+    final logoSize = R.sp(90);
+    final titleFontSize = R.fs(19, minSize: 14, maxSize: 22);
+    final subtitleFontSize = R.fs(12, minSize: 10, maxSize: 14);
+
+    // Text shadow so letters always float clearly above the background
+    final textShadow = Shadow(
+      color: Colors.black.withOpacity(0.30),
+      blurRadius: 6,
+      offset: const Offset(0, 2),
+    );
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(cardPad),
       decoration: BoxDecoration(
         gradient: background,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1F6FEA).withOpacity(0.22),
-            blurRadius: 22,
+            color: shadowColor.withOpacity(0.42),
+            blurRadius: 26,
             offset: const Offset(0, 12),
           ),
         ],
@@ -427,7 +449,7 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
               height: 128,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.10),
+                color: Colors.white.withOpacity(0.08),
               ),
             ),
           ),
@@ -435,11 +457,11 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
             right: 8,
             bottom: -6,
             child: Opacity(
-              opacity: isEvening ? 0.96 : 0.18,
+              opacity: isEvening ? 0.90 : 0.14,
               child: Image.asset(
                 'assets/images/lior_logo_no_bg.png',
-                width: 98,
-                height: 98,
+                width: logoSize,
+                height: logoSize,
                 fit: BoxFit.contain,
               ),
             ),
@@ -447,35 +469,41 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
           Row(
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: iconBoxSize,
+                height: iconBoxSize,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.16)),
+                  color: Colors.white.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withOpacity(0.30)),
                 ),
-                child: Icon(icon, color: Colors.white, size: 30),
+                child: Icon(icon, color: Colors.white, size: iconSize),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: R.sp(12)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '$greeting, $userName',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: titleColor,
-                        fontSize: 20,
+                        fontSize: titleFontSize,
                         fontWeight: FontWeight.w800,
+                        shadows: [textShadow],
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: R.sp(5)),
                     Text(
                       'Here is your lounge overview for today.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: titleColor.withOpacity(0.92),
-                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.88),
+                        fontSize: subtitleFontSize,
                         fontWeight: FontWeight.w500,
+                        shadows: [textShadow],
                       ),
                     ),
                   ],
@@ -490,6 +518,8 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Initialise responsive helper for this frame
+    R.init(context);
     const bg = Color(0xFFFFFBF5);
 
     return Consumer2<LoungeOwnerProvider, AuthProvider>(
@@ -528,9 +558,9 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                     onRefresh: _loadData,
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 8,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: R.sp(16),
+                        vertical: R.sp(8),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,30 +568,30 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                           _buildVerificationBanner(
                             loungeOwner?.verificationStatus,
                           ),
-                          const SizedBox(height: 18),
+                          SizedBox(height: R.sp(16)),
                           _buildGreetingCard(
                             greeting: greeting,
                             userName: userName,
                           ),
-                          const SizedBox(height: 18),
-                          const Text(
+                          SizedBox(height: R.sp(16)),
+                          Text(
                             'Quick Actions',
                             style: TextStyle(
                               color: Colors.black87,
                               fontWeight: FontWeight.w700,
-                              fontSize: 16,
+                              fontSize: R.fs(15, minSize: 13),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: R.sp(10)),
                           loungeOwner?.verificationStatus != 'approved'
                               ? _buildPendingActionsMessage()
                               : GridView.count(
-                                  crossAxisCount: 2,
+                                  crossAxisCount: R.gridColumns,
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
-                                  mainAxisSpacing: 12,
-                                  crossAxisSpacing: 12,
-                                  childAspectRatio: 1.6,
+                                  mainAxisSpacing: R.sp(10),
+                                  crossAxisSpacing: R.sp(10),
+                                  childAspectRatio: R.actionTileAspectRatio,
                                   children: [
                                     _buildActionTile(
                                       label: 'Add Staff',
@@ -697,7 +727,7 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
                                     ),
                                   ],
                                 ),
-                          const SizedBox(height: 36),
+                          SizedBox(height: R.sp(30)),
                         ],
                       ),
                     ),
@@ -1355,33 +1385,49 @@ class _LoungeOwnerHomeScreenState extends State<LoungeOwnerHomeScreen> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
+    final tilePad = R.sp(10);
+    final iconContainerPad = R.sp(8);
+    final iconSize = R.sp(22);
+    final iconRadius = R.sp(10);
+    final gap = R.sp(8);
+    final labelFontSize = R.fs(12, minSize: 10, maxSize: 14);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(tilePad),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Icon container — fixed size so it never shifts
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: EdgeInsets.all(iconContainerPad),
               decoration: BoxDecoration(
                 color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(iconRadius),
               ),
-              child: Icon(icon, size: 24, color: AppColors.primary),
+              child: Icon(icon, size: iconSize, color: AppColors.primary),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: gap),
+            // Label — FittedBox keeps the text on ONE line and scales it down
+            // only as far as needed, never breaking to a second line.
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: labelFontSize,
+                  ),
                 ),
               ),
             ),

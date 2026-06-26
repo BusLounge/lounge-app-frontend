@@ -5,6 +5,7 @@ import 'package:lounge_owner_app/config/constants.dart';
 import 'package:lounge_owner_app/presentation/providers/staff_provider.dart';
 import 'package:lounge_owner_app/presentation/providers/auth_provider.dart';
 import 'package:lounge_owner_app/screens/profile/profile_screen.dart';
+import 'package:lounge_owner_app/utils/responsive_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -75,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    R.init(context);
     return Consumer2<StaffProvider, AuthProvider>(
       builder: (context, staffProvider, authProvider, child) {
         final staff = staffProvider.staff;
@@ -97,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: _loadProfile,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(AppSpacing.large),
+              padding: EdgeInsets.all(R.sp(AppSpacing.large)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -180,8 +182,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     .isEmpty
                                 ? 'Staff Member'
                                 : '${user?.firstName ?? ''} ${user?.lastName ?? ''}',
-                            style: const TextStyle(
-                              fontSize: 22,
+                            style: TextStyle(
+                              fontSize: R.fs(22, minSize: 16, maxSize: 26),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
